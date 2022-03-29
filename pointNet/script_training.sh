@@ -1,0 +1,1 @@
+python train.py lidar /dades/LIDAR/towers_detection/datasets classification results/ --batch_size 32 --epochs 200 --learning_rate 0.001 --weighing_method EFS --number_of_points 2000 --number_of_workers 4

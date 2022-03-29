@@ -1,0 +1,25 @@
+
+
+
+100% (15518 of 15518) |##############################################################################################################################| Elapsed Time: 0:05:44 Time:  0:05:44
+
+best_checkpoint_03-15-12:48EFS0.999.pth
+Model trained for 70 epochs
+Logistic: f1=0.922 auc=0.922
+All positive:  78
+TP:  71
+FP:  5
+Accuracy: 99.92 %
+Recall: 91.03 %
+Precision: 93.42 %
+
+
+best_checkpoint_03-15-12:48EFS0.99.pth
+Model trained for 71 epochs
+Logistic: f1=0.899 auc=0.939
+All positive:  77
+TP:  67
+FP:  5
+Accuracy: 99.9 %
+Recall: 87.01 %
+Precision: 93.06 %
