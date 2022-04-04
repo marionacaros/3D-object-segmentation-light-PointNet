@@ -101,7 +101,7 @@ def test(dataset_folder,
             pc, target = pc.cuda(), target.cuda()
         model = model.eval()
 
-        log_probs, feature_transform = model(pc, epoch=0, target=target, fileName=file_name)  # [1,2], [1, 64, 64]
+        log_probs, feature_transform = model(pc)  # [1,2], [1, 64, 64]  epoch=0, target=target, fileName=file_name
         probs = torch.exp(log_probs.cpu().detach())  # [1, 2]
         all_probs.append(probs.numpy().reshape(2))
 

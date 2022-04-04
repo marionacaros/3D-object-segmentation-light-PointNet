@@ -65,8 +65,6 @@ class LidarDataset(data.Dataset):
             sampling_indices = np.random.choice(pc.shape[0], number_of_points)
             pc = pc[sampling_indices, :]
 
-        pc[:, 11] = (pc[:, 11] + 1) / 2
-
         if task == 'segmentation':
             segment_labels = pc[:, 3].astype(np.int)  # [2000,1]
             segment_labels[segment_labels != 15] = 0

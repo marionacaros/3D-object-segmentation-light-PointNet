@@ -8,16 +8,26 @@ import pickle
 import numpy as np
 import random
 
-main_path = '/dades/LIDAR/towers_detection/datasets/train/landscape_2000/*.pkl'
-# main_path = '/dades/LIDAR/towers_detection/datasets/train/towers_2000/*.pkl'
+main_path = '/dades/LIDAR/towers_detection/datasets/train/towers_2000/*.pkl'
 list_f = glob.glob(main_path)
 random.shuffle(list_f)
 print(len(list_f))
+#
+# for i, file in enumerate(list_f):
+#     if i <= len(list_f)/2:
+#         shutil.move(file, '/dades/LIDAR/towers_detection/datasets/val/towers_2000/.')
+#     # print(file)
 
-for i, file in enumerate(list_f):
-    if i <= 23248:
-        shutil.move(file, '/dades/LIDAR/towers_detection/datasets/test/landscape_2000/.')
-    # print(file)
+main_path = '/dades/LIDAR/towers_detection/datasets/train/landscape_2000/*.pkl'
+list_f = glob.glob(main_path)
+random.shuffle(list_f)
+print(len(list_f))
+#
+# for i, file in enumerate(list_f):
+#     if i <= len(list_f)/2:
+#         shutil.move(file, '/dades/LIDAR/towers_detection/datasets/val/landscape_2000/.')
+
+
 
 
     # with open(file, 'rb') as f:

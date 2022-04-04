@@ -75,9 +75,10 @@ class BasePointNet(nn.Module):
         x_tnet = x[:, :, :2]  # only apply T-NET to x and y
         input_transform = self.input_transform(x_tnet)
         x_tnet = torch.bmm(x_tnet, input_transform)  # Performs a batch matrix-matrix product
-        # x_tnet = torch.cat([x_tnet, x[:, :, 2].unsqueeze(2)], dim=2)  # concat z
         x_tnet = torch.cat([x_tnet, x[:, :, 2].unsqueeze(2), x[:, :, 4].unsqueeze(2)], dim=2)  # concat z and intensity
-        x_tnet = torch.cat([x_tnet, x[:, :, 8].unsqueeze(2), x[:, :, 9].unsqueeze(2), x[:, :, 11].unsqueeze(2)], dim=2)  # concat RGB
+        x_tnet = torch.cat([x_tnet, x[:, :, 8].unsqueeze(2), x[:, :, 9].unsqueeze(2), x[:, :, 11].unsqueeze(2)],
+                           dim=2)  # concat Green Blue NDVI
+        # x_tnet = torch.cat([x_tnet, x[:, :, 7].unsqueeze(2), x[:, :, 8].unsqueeze(2), x[:, :, 9].unsqueeze(2), x[:, :, 10].unsqueeze(2)], dim=2)  # concat RGB
         x_tnet = x_tnet.transpose(2, 1)  # [batch, dims, n_points]
 
         x = F.relu(self.bn_1(self.conv_1(x_tnet)))

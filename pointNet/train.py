@@ -52,8 +52,8 @@ def train(dataset,
 
     # Datasets train / val / test
     if task == 'classification':
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_I_NDVI_train' + 'B'+str(BETA))
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_I_NDVI_val' + 'B'+str(BETA))
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_train' + 'B'+str(BETA))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_val' + 'B'+str(BETA))
         logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
         train_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'train'), task=task, number_of_points=number_of_points)
@@ -149,6 +149,8 @@ def train(dataset,
 
     for epoch in progressbar(range(epochs), redirect_stdout=True):
         epoch_train_loss = []
+        regu_train_loss = []
+        not_regu_train_loss = []
         epoch_train_acc = []
         epoch_train_acc_w = []
         batch_number = 0
@@ -184,8 +186,11 @@ def train(dataset,
             identity = torch.eye(feature_transform.shape[-1])
             identity = identity.to(device)
             regularization_loss = torch.norm(identity - torch.bmm(feature_transform, feature_transform.transpose(2, 1)))
-            loss = F.nll_loss(preds, targets, weight=c_weights) + 0.001 * regularization_loss
+            loss = F.nll_loss(preds, targets, weight=c_weights)
+            not_regu_train_loss.append(loss.cpu().item())
+            loss = loss + 0.001 * regularization_loss
             epoch_train_loss.append(loss.cpu().item())
+            regu_train_loss.append(regularization_loss.cpu().item())
 
             loss.backward()
             optimizer.step()
@@ -205,6 +210,9 @@ def train(dataset,
         epoch_val_loss = []
         epoch_val_acc = []
         epoch_val_acc_w = []
+        detected_positive = []
+        detected_negative = []
+
         for batch_number, data in enumerate(val_dataloader):
             points, targets, file_name = data
 
@@ -216,15 +224,22 @@ def train(dataset,
             if torch.cuda.is_available():
                 points, targets = points.cuda(), targets.cuda()
             model = model.eval()
-            preds, feature_transform = model(points)
+            preds, feature_transform = model(points)   # [batch, 2]
 
             if task == 'segmentation':
                 preds = preds.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)
                 targets = targets.view(-1)
+
             loss = F.nll_loss(preds, targets, weight=c_weights)
             epoch_val_loss.append(loss.cpu().item())
             preds = preds.data.max(1)[1]
             corrects = preds.eq(targets.data).cpu().sum()
+
+            targets_pos = (np.array(targets.cpu()) == np.ones(len(targets))).sum()
+            targets_neg = (np.array(targets.cpu()) == np.zeros(len(targets))).sum()
+            detected_positive.append((np.array(preds.cpu()) == np.ones(len(preds))).sum())  # boolean with positions of 1s
+            detected_negative.append((np.array(preds.cpu()) == np.zeros(len(preds))).sum()) # boolean with positions of 0s
+
             if task == 'classification':
                 accuracy = corrects.item() / float(batch_size)
                 accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
@@ -238,11 +253,16 @@ def train(dataset,
         # Tensorboard
         writer_train.add_scalar('loss', np.mean(epoch_train_loss), epoch)
         writer_val.add_scalar('loss', np.mean(epoch_val_loss), epoch)
+        writer_train.add_scalar('mean_detected_positive', np.mean(targets_pos), epoch)
+        writer_val.add_scalar('mean_detected_positive', np.mean(detected_positive), epoch)
+        writer_train.add_scalar('mean_detected_negative', np.mean(targets_neg), epoch)
+        writer_val.add_scalar('mean_detected_negative', np.mean(detected_negative), epoch)
+        writer_train.add_scalar('regularization_loss', np.mean(regu_train_loss), epoch)
         writer_train.add_scalar('accuracy_weighted', np.mean(epoch_train_acc_w), epoch)
         writer_val.add_scalar('accuracy_weighted', np.mean(epoch_val_acc_w), epoch)
         writer_train.add_scalar('accuracy', np.mean(epoch_train_acc), epoch)
         writer_val.add_scalar('accuracy', np.mean(epoch_val_acc), epoch)
-        writer_val.add_scalar('epochs_since_imporvement', epochs_since_improvement, epoch)
+        writer_val.add_scalar('epochs_since_improvement', epochs_since_improvement, epoch)
         writer_val.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
 
         writer_train.flush()

@@ -38,15 +38,15 @@
 #--number_of_points 2000 --number_of_workers 0 \
 #--model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/2000p/best_checkpoint_03-07-23:17ISNS.pth
 
-python test.py /dades/LIDAR/towers_detection/datasets classification results/ --weighing_method sklearn \
---number_of_points 2000 --number_of_workers 0 \
---model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/best_checkpoint_03-18-11:52sklearn0.999.pth
+#python test.py /dades/LIDAR/towers_detection/datasets classification results/ --weighing_method sklearn \
+#--number_of_points 2000 --number_of_workers 0 \
+#--model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/best_checkpoint_03-18-11:52sklearn0.999.pth
 
 # -----new dataset best models-----
 
-#python test.py /dades/LIDAR/towers_detection/datasets classification results/ --weighing_method EFS \
-#--number_of_points 2000 --number_of_workers 0 \
-#--model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/best_checkpoint_03-18-11:53EFS0.999.pth
+python test.py /dades/LIDAR/towers_detection/datasets classification results/ --weighing_method EFS \
+--number_of_points 2000 --number_of_workers 0 \
+--model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/checkpoint_03-30-14:00EFS0.999.pth
 #
 #python test.py /dades/LIDAR/towers_detection/datasets classification results/ --weighing_method EFS \
 #--number_of_points 2000 --number_of_workers 0 \
