@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import plot_hist, plot_3d
-import glob
 
 
 class TransformationNet(nn.Module):
