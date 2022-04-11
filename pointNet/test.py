@@ -1,4 +1,5 @@
 import argparse
+import glob
 import time
 
 import matplotlib.pyplot as plt
@@ -41,7 +42,10 @@ def test(dataset_folder,
     # Datasets train / test
     train_dataset = LidarDataset(os.path.join(dataset_folder, 'train'), task=task, number_of_points=number_of_points)
     logging.info(f'Samples for training: {len(train_dataset)}')
-    test_dataset = LidarDataset(os.path.join(dataset_folder, 'test'), task=task, number_of_points=number_of_points)
+
+    towers_files = glob.glob(os.path.join(dataset_folder, 'test/towers_2000/*.pkl'))
+    test_dataset = LidarDataset('', task=task, number_of_points=number_of_points,
+                                          files_segmentation=towers_files)
     logging.info(f'Samples for validation: {len(test_dataset)}')
 
     logging.info(f'Task: {train_dataset.task}')
