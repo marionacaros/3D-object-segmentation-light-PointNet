@@ -12,8 +12,8 @@ import datetime
 from sklearn.metrics import balanced_accuracy_score
 import warnings
 from utils import *
-import pandas as pd
 import glob
+from torchsummary import summary
 
 warnings.filterwarnings('ignore')
 
@@ -68,22 +68,22 @@ def train(dataset,
         logging.info(f'Proportion towers/landscape: {round((val_dataset.len_towers/val_dataset.len_landscape)*100,3)}%')
 
     elif task == 'segmentation':
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_train')
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_val')
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_train256light')
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_val256light')
         logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
         # path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:53EFS0.999.pth.csv'
-        path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:52sklearn0.999.pth.csv'
-        df = pd.read_csv(path)
-        no_towers_files = list(df['file_name'])
-        logging.info(f'Samples without towers in train set: {len(no_towers_files)*0.8}')
-        towers_files= glob.glob(os.path.join(dataset_folder, 'train/towers_2000/*.pkl'))
-        logging.info(f'Samples with towers in train set: {len(towers_files)}')
+        # path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:52sklearn0.999.pth.csv'
+        # df = pd.read_csv(path)
+        # no_towers_files = list(df['file_name'])
+        # logging.info(f'Samples without towers in train set: {len(no_towers_files)*0.8}')
+        train_files= glob.glob(os.path.join(dataset_folder, 'train/towers_2000/*.pkl'))
+        val_files= glob.glob(os.path.join(dataset_folder, 'val/towers_2000/*.pkl'))
+        logging.info(f'Samples with towers in train set: {len(train_files)}')
 
-        train_files = towers_files + no_towers_files[:round(0.8*len(no_towers_files))]
-
-        val_files = glob.glob(os.path.join(dataset_folder, 'val/towers_2000/*.pkl')) + \
-                    no_towers_files[round(0.8*len(no_towers_files)):round(0.9*len(no_towers_files))]
+        # train_files = towers_files + no_towers_files[:round(0.8*len(no_towers_files))]
+        # val_files = glob.glob(os.path.join(dataset_folder, 'val/towers_2000/*.pkl')) + \
+        #             no_towers_files[round(0.8*len(no_towers_files)):round(0.9*len(no_towers_files))]
 
         train_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'train/towers_2000'), task=task,
                                           number_of_points=number_of_points,
@@ -127,6 +127,10 @@ def train(dataset,
         logging.info(f"cuda not available")
         device = 'cpu'
 
+    # print model and parameters
+    INPUT_SHAPE = (7, 2000)
+    summary(model, INPUT_SHAPE)
+
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if model_checkpoint:
@@ -147,6 +151,12 @@ def train(dataset,
     c_weights = None
     sample_weights = None
 
+    #  add graph
+    # point, targets, file_name = next(iter(train_dataloader))
+    # point = point[0,:,:]  # [2000,12]
+    # point = point.unsqueeze(0)
+    # writer_train.add_graph(model, point.cuda())
+
     for epoch in progressbar(range(epochs), redirect_stdout=True):
         epoch_train_loss = []
         regu_train_loss = []
@@ -155,11 +165,12 @@ def train(dataset,
         epoch_train_acc_w = []
         batch_number = 0
 
-        if epochs_since_improvement == 20:
+        if epochs_since_improvement == 10:
             adjust_learning_rate(optimizer)
 
         # --------------------------------------------- train loop ---------------------------------------------
         for data in train_dataloader:
+
             batch_number += 1
             points, targets, file_name = data  # [batch, n_samples, dims] [batch, n_samples]
 
@@ -224,11 +235,11 @@ def train(dataset,
             if torch.cuda.is_available():
                 points, targets = points.cuda(), targets.cuda()
             model = model.eval()
-            preds, feature_transform = model(points)   # [batch, 2]
+            preds, feature_transform = model(points)   # [batch, n_points, 2]
 
             if task == 'segmentation':
-                preds = preds.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)
-                targets = targets.view(-1)
+                preds = preds.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)   # [batch * n_points, 2]
+                targets = targets.view(-1)  # [batch * n_points]
 
             loss = F.nll_loss(preds, targets, weight=c_weights)
             epoch_val_loss.append(loss.cpu().item())
@@ -268,14 +279,14 @@ def train(dataset,
         writer_train.flush()
         writer_val.flush()
 
-        print(f'Epoch {epoch}: train loss: {np.mean(epoch_train_loss)}, val loss: {np.mean(epoch_val_loss)},'
-              f'train accuracy: {np.mean(epoch_train_acc_w)},  val accuracy: {np.mean(epoch_val_acc_w)}')
-        print(f'Weights: {c_weights}')
+        # print(f'Epoch {epoch}: train loss: {np.mean(epoch_train_loss)}, val loss: {np.mean(epoch_val_loss)},'
+        #       f'train accuracy: {np.mean(epoch_train_acc)},  val accuracy: {np.mean(epoch_val_acc)}')
+        # print(f'Weights: {c_weights}')
 
         if np.mean(epoch_val_loss) < best_vloss:
             # Save checkpoint
             if task == 'classification':
-                name = now.strftime("%m-%d-%H:%M") + weighing_method + str(BETA)
+                name = now.strftime("%m-%d-%H:%M") + str(BETA)
             elif task == 'segmentation':
                 name = now.strftime("%m-%d-%H:%M") + '_seg'
             save_checkpoint(name, epoch, epochs_since_improvement, model, optimizer, accuracy, batch_size,
@@ -320,7 +331,7 @@ def save_checkpoint(name, epoch, epochs_since_improvement, model, optimizer, acc
     torch.save(state, 'checkpoints/' + filename)
 
 
-def adjust_learning_rate(optimizer, shrink_factor=0.1):
+def adjust_learning_rate(optimizer, shrink_factor=0.5):
     """
     Shrinks learning rate by a specified factor.
 
