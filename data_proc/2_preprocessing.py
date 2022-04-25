@@ -1,11 +1,13 @@
 import hashlib
 import logging
+import os
+
 from utils import *
 import pickle
 import laspy
 import time
 
-logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+logging.basicConfig(format='--- %(asctime)s %(levelname)-8s --- %(message)s',
                     level=logging.INFO,
                     datefmt='%Y-%m-%d %H:%M:%S')
 
@@ -20,7 +22,8 @@ def get_max(files_path):
             max_z = hag.max()
 
 
-def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=5000):
+def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=5000, n_points=2000,
+                               raw_data=False, dataset=''):
     """
     1- Remove certain labeled points (by Terrasolid) to reduce noise and number of points
     2- Add NIR from dictionary
@@ -51,37 +54,42 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
         fileName = file.split('/')[-1].split('.')[0]
         data_f = laspy.read(file)
 
-        data_f.points = data_f.points[np.where(data_f.classification != 8)]
-        data_f.points = data_f.points[np.where(data_f.classification != 13)]
+        if not raw_data:
+            data_f.points = data_f.points[np.where(data_f.classification != 8)]
+            data_f.points = data_f.points[np.where(data_f.classification != 13)]
+            data_f.points = data_f.points[np.where(data_f.classification != 24)]
+
+        # Remove sensor noise
         data_f.points = data_f.points[np.where(data_f.classification != 30)]
-        data_f.points = data_f.points[np.where(data_f.classification != 24)]
+
         # Remove outliers (points above max_z)
         data_f.points = data_f.points[np.where(data_f.HeightAboveGround <= max_z)]
         # Remove points z < 0
         data_f.points = data_f.points[np.where(data_f.HeightAboveGround >= 0)]
-        # data_f.points = data_f.points[np.where(data_f.classification != 2)]
 
         # check file is not empty
         if len(data_f.x) > 0:
-            # get NIR
-            nir_arr = []
-            with open(file.replace(".las", "") + '_NIR.pkl', 'rb') as f:
-                nir_dict = pickle.load(f)
 
-            for x, y, z in zip(data_f.x, data_f.y, data_f.z):
-                mystring = str(int(x)) + '_' + str(int(y)) + '_' + str(int(z))
-                hash_object = hashlib.md5(mystring.encode())
-                nir_arr.append(nir_dict[hash_object.hexdigest()])
+            if dataset != 'BDN':
+                # get NIR
+                nir_arr = []
+                with open(file.replace(".las", "") + '_NIR.pkl', 'rb') as f:
+                    nir_dict = pickle.load(f)
 
-            # NDVI
-            nir_arr = np.array(nir_arr)
-            ndvi_arr = (nir_arr - data_f.red) / (nir_arr + data_f.red)  # range [-1, 1]
+                for x, y, z in zip(data_f.x, data_f.y, data_f.z):
+                    mystring = str(int(x)) + '_' + str(int(y)) + '_' + str(int(z))
+                    hash_object = hashlib.md5(mystring.encode())
+                    nir_arr.append(nir_dict[hash_object.hexdigest()])
 
+                # NDVI
+                nir_arr = np.array(nir_arr)
+                ndvi_arr = (nir_arr - data_f.red) / (nir_arr + data_f.red)  # range [-1, 1]
+            else:
+                nir_arr = np.zeros(len(data_f.x))
+                ndvi_arr = np.zeros(len(data_f.x))
             try:
                 pc = np.vstack((data_f.x, data_f.y, data_f.HeightAboveGround, data_f.classification,
                                 data_f.intensity / max_intensity,
-                                data_f.return_number,
-                                data_f.number_of_returns,
                                 data_f.red / 65536.0,
                                 data_f.green / 65536.0,
                                 data_f.blue / 65536.0,
@@ -90,7 +98,7 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
 
                 # ----------------------------------------- NORMALIZATION -----------------------------------------
                 pc = pc.transpose()
-                # normalize axes  todo check that w is 40 meters
+                # normalize axes
                 pc[:, 0] = (pc[:, 0] - pc[:, 0].min()) / (pc[:, 0].max() - pc[:, 0].min())
                 pc[:, 1] = (pc[:, 1] - pc[:, 1].min()) / (pc[:, 1].max() - pc[:, 1].min())
                 pc[:, 2] = pc[:, 2] / max_z
@@ -99,62 +107,72 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
 
                 # make sure intensity and NIR is in range (0,1)
                 pc[:, 4] = np.clip(pc[:, 4], 0.0, 1.0)
-                pc[:, 10] = np.clip(pc[:, 10], 0.0, 1.0)
+                pc[:, 8] = np.clip(pc[:, 8], 0.0, 1.0)
                 # normalize NDVI
-                pc[:, 11] = (pc[:, 11] + 1) / 2
-                pc[:, 11] = np.clip(pc[:, 11], 0.0, 1.0)
+                pc[:, 9] = (pc[:, 9] + 1) / 2
+                pc[:, 9] = np.clip(pc[:, 9], 0.0, 1.0)
                 # return number not normalized
                 # number of returns not normalized
 
-                # Check if points different from terrain < 2000
-                len_pc = pc[pc[:, 3] != 2].shape[0]
+                if not raw_data:
 
-                if 100 < len_pc < 2000:
-                    # Get indices of terrain points
-                    labels = pc[:, 3]
-                    i_terrain = [i for i in range(len(labels)) if labels[i] == 2.0]
-                    # i_terrain = np.where(labels == 2.0, labels)
-                    len_needed_p = 2000 - len_pc
-                    if len_needed_p > len(i_terrain):
-                        needed_i = i_terrain
-                        count_less_2000 += 1
+                    # Check if points different from terrain < 2000
+                    len_pc = pc[pc[:, 3] != 2].shape[0]
+
+                    if 10 < len_pc < n_points:
+                        # Get indices of terrain points
+                        labels = pc[:, 3]
+                        i_terrain = [i for i in range(len(labels)) if labels[i] == 2.0]
+                        # i_terrain = np.where(labels == 2.0, labels)
+                        len_needed_p = n_points - len_pc
+                        if len_needed_p > len(i_terrain):
+                            needed_i = i_terrain
+                            count_less_2000 += 1
+                        else:
+                            count_mantain_terrain_p += 1
+                            needed_i = np.random.choice(i_terrain, len_needed_p)
+                        points_needed_terrain = pc[needed_i, :]
+                        # remove terrain points
+                        pc = pc[pc[:, 3] != 2, :]
+                        # store only needed terrain points
+                        pc = np.concatenate((pc, points_needed_terrain), axis=0)
+
+                    elif len_pc >= n_points:
+                        pc = pc[pc[:, 3] != 2, :]
+
+                    elif len_pc <= 10:
+                        print(f'Point cloud {fileName} not stored. Less than 10 points. Only {len_pc} points')
+                        continue
+
+                    if pc.shape[0] >= n_points:
+                        if pc[:, 2].max() > max_z:
+                            print('Outliers not removed correctly!!')
+                        total_count += 1
+                        f_path = os.path.join(path_no_ground_dir, fileName)
+                        with open(f_path + '.pkl', 'wb') as f:
+                            pickle.dump(pc, f)
                     else:
-                        count_mantain_terrain_p += 1
-                        needed_i = np.random.choice(i_terrain, len_needed_p)
-                    points_needed_terrain = pc[needed_i, :]
-                    # remove terrain points
-                    pc = pc[pc[:, 3] != 2, :]
-                    # store only needed terrain points
-                    pc = np.concatenate((pc, points_needed_terrain), axis=0)
-
-                elif len_pc >= 2000:
-                    pc = pc[pc[:, 3] != 2, :]
-
-                elif len_pc <= 100:
-                    print(
-                        f'Point cloud {fileName} not stored. Less than 100 points in point cloud. Only {len_pc} points')
-                    continue
-
-                if pc.shape[0] >= 2000:
-                    if pc[:, 2].max() > max_z:
-                        print('Outliers not removed correctly!!')
-                    total_count += 1
-                    f_path = os.path.join(path_no_ground_dir, fileName)
-                    with open(f_path + '.pkl', 'wb') as f:
-                        pickle.dump(pc, f)
+                        print(f'Point cloud {fileName} not stored. Number of points < {n_points}')
                 else:
-                    print(f'Point cloud {fileName} not stored. Number of points < 2000')
+                    # store raw data
+                    if pc.shape[0] >= 1000:  # remove windows with less than 1000 points
+                        total_count += 1
+                        f_path = os.path.join(path_no_ground_dir, fileName)
+                        with open(f_path + '.pkl', 'wb') as f:
+                            pickle.dump(pc, f)
+                    else:
+                        print(f'Point cloud {fileName} not stored. Less than 1000 points. Only {pc.shape[0]} points')
 
             except Exception as e:
                 print(f'Error {e} in file {fileName}')
 
     print(f'count_mantain_terrain_p: {count_mantain_terrain_p}')
-    print(f'count_less_2000: {count_less_2000}')
+    print(f'count_less {n_points}: {count_less_2000}')
     print(f'total_count: {total_count}')
     return path_no_ground_dir
 
 
-def sampling(files_path, N_POINTS, TH_1=3.0, TH_2=8.0):
+def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
     count_interpolate = 0
     count_sample3 = 0
     count_sample8 = 0
@@ -166,7 +184,8 @@ def sampling(files_path, N_POINTS, TH_1=3.0, TH_2=8.0):
     if not os.path.exists(path_sampled):
         os.makedirs(path_sampled)
 
-    files = glob.glob(os.path.join(files_path, '*.pkl'))
+    files_path= os.path.join(files_path, '*' + DATASET + '*.pkl')
+    files = glob.glob(files_path)
     for file in progressbar(files):
         fileName = file.split('/')[-1].split('.')[0]
         with open(file, 'rb') as f:
@@ -264,7 +283,7 @@ def sampling(files_path, N_POINTS, TH_1=3.0, TH_2=8.0):
 
     print(f'counter sampled below {TH_1} m: {count_sample3}')
     print(f'counter sampled below {TH_2} m: {count_sample8}')
-    print(f'counter sample all: {count_sample_all}')
+    print(f'counter sampled all: {count_sample_all}')
     print(f'counter total sampled: {count_sample3 + count_sample8 + count_sample_all}')
     print(f'counter added synthetic data: {count_interpolate}')
     # print(f'Discarded point clouds because < {MIN_POINTS} points: ', c_min_points)
@@ -272,41 +291,46 @@ def sampling(files_path, N_POINTS, TH_1=3.0, TH_2=8.0):
 
 if __name__ == '__main__':
 
-    N_POINTS = 2000
+    N_POINTS = 2048
     MAX_Z = 100.0
-    # paths = ['/home/m.caros/work/objectDetection/datasets/data_BDN/pc_towers_40x40/*.las',
-    #          '/home/m.caros/work/objectDetection/datasets/data_BDN/pc_no_towers_40x40/*.las']
+    raw_data = True
+    logging.info(f'Want raw data: {raw_data}') # if raw data == True code does not remove ground points
 
-    paths = ['/home/m.caros/work/objectDetection/datasets/RIBERA/w_towers_40x40',
-    '/home/m.caros/work/objectDetection/datasets/RIBERA/w_no_towers_40x40']
-        # ['/home/m.caros/work/objectDetection/datasets/CAT3/w_towers_40x40',
-        #      '/home/m.caros/work/objectDetection/datasets/CAT3/w_no_towers_40x40']
-
+    DATASET = 'CAT3'
+    paths = ['/home/m.caros/work/objectDetection/datasets/' + DATASET + '/w_towers_40x40',
+             '/home/m.caros/work/objectDetection/datasets/' + DATASET + '/w_no_towers_40x40']
 
     start_time = time.time()
-
     for files_path in paths:
-        print(files_path)
+        logging.info(f'Input path: {files_path}')
 
         # execute compute_pdal_bash.sh  # get HeighAboveGround
 
         if 'w_towers' in files_path:
             out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
+            if raw_data:
+                out_path = '/dades/LIDAR/towers_detection/datasets/raw_pc_towers_40x40_True'  #TODO VIGILAR PATH!!
         elif 'w_no_towers' in files_path:
             out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
+            if raw_data:
+                out_path = '/dades/LIDAR/towers_detection/datasets/raw_pc_no_towers_40x40_True'
 
         # ------ Remove ground, noise and outliers and normalize ------
         logging.info(f"1. Remove points of ground, noise and outliers and normalize ")
-        no_ground_path = remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000)
+        no_ground_path = remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000,
+                                                    n_points=N_POINTS, raw_data=raw_data, dataset=DATASET)
         print("--- Remove ground and noise time: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
 
         rm_ground_time = time.time()
-        # no_ground_path = os.path.join(out_path, 'data_no_ground')
+        no_ground_path = os.path.join(out_path, 'data_no_ground')
         print(f'Ground path {no_ground_path}')
 
-        # ------ sampling ------
-        logging.info(f"2. Sampling")
-        sampling(no_ground_path, N_POINTS=N_POINTS, TH_1=3.0 / MAX_Z, TH_2=8.0 / MAX_Z)
-        print("--- Sample and interpolate time: %s h ---" % (round((time.time() - rm_ground_time) / 3600, 3)))
+        if not raw_data:
+            # ------ sampling ------
+            logging.info(f"2. Sampling")
+            sampling(no_ground_path, DATASET, N_POINTS=N_POINTS, TH_1=3.0 / MAX_Z, TH_2=8.0 / MAX_Z)
+            
+            print("--- Sample and interpolate time: %s h ---" % (round((time.time() - rm_ground_time) / 3600, 3)))
 
     print("--- TOTAL TIME: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
+    

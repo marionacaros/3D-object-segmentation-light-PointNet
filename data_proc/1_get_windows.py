@@ -20,10 +20,7 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
     global save_path
     start_time = time.time()
     logging.info(f"Dataset: {DATASET_NAME}")
-    dic_center_towers = {}
-    dict_pc = {}
-    point_clouds = {}
-    min_p = 20
+    min_p = 10
 
     # ------------------------------------------------- 1 --------------------------------------------------------
     # Get LAS blocks containing towers
@@ -36,22 +33,22 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
     #     pickle.dump(block_points_towers, f)
 
     # Load dictionary
-    # with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
-    #     block_points_towers = pickle.load(f)
+    with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
+        block_points_towers = pickle.load(f)
 
     # ----------------------------------------------- 2 ----------------------------------------------------------
     # Sliding Window for tower segmentation
-    # logging.info('----------------- 2 -----------------')
-    # dic_pc_towers, dic_center_towers = object_segmentation(block_points_towers,
-    #                                                        min_points=min_p,
-    #                                                        windowSize=[20, 20],  # [40, 40]
-    #                                                        stepSize_x=10,
-    #                                                        stepSize_y=20,
-    #                                                        show_prints=False)
-    # with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
-    #     pickle.dump(dic_pc_towers, f)
-    # with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
-    #     json.dump(dic_center_towers, f)
+    logging.info('----------------- 2 -----------------')
+    dic_pc_towers, dic_center_towers = object_segmentation(block_points_towers,
+                                                           min_points=min_p,
+                                                           windowSize=[20, 20],
+                                                           stepSize_x=10,
+                                                           stepSize_y=20,
+                                                           show_prints=False)
+    with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
+        pickle.dump(dic_pc_towers, f)
+    with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
+        json.dump(dic_center_towers, f)
 
     # Load dictionaries
     # with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'rb') as f:
@@ -137,7 +134,6 @@ def read_las_files(path):
     :return: dict with [x,y,z,class]
     """
     dict_pc = {}
-    logging.info('Loading LAS files')
     files = glob.glob(os.path.join(path, '*.las'))
     with alive_bar(len(files), bar='bubbles', spinner='notes2') as bar:
         for f in files:
@@ -158,22 +154,21 @@ def get_context(dic_center_towers, w_size=[40, 40], path='', dataset=''):
         for f in files:
             fileName = f.split('/')[-1].split('.')[0]
             las_pc = laspy.read(f)
-            if dataset == 'CAT3':
+            if dataset == 'CAT3' or dataset == 'RIBERA':
                 nir = las_pc.nir
-            elif dataset == 'RIBERA':
-                nir = las_pc.nir
-                # hag = las_pc.HeightAboveGround  # todo check HAG
+                red = las_pc.red
+                green = las_pc.green
+                blue = las_pc.blue
             elif dataset == 'BDN':
                 nir = np.zeros(len(las_pc))
+                red = np.zeros(len(las_pc))
+                green = np.zeros(len(las_pc))
+                blue = np.zeros(len(las_pc))
 
             coords_pc_class = np.vstack((las_pc.x, las_pc.y, las_pc.z, las_pc.classification,
-                                         las_pc.intensity,
-                                         las_pc.return_number,
-                                         las_pc.number_of_returns,
-                                         las_pc.red,
-                                         las_pc.green,
-                                         las_pc.blue,
-                                         nir))
+                                        las_pc.intensity,
+                                        red, green, blue,
+                                        nir))
             bar()
             if fileName in dic_center_towers:
                 dict_w_c = dic_center_towers[fileName]
@@ -196,12 +191,12 @@ def get_context(dic_center_towers, w_size=[40, 40], path='', dataset=''):
                         # store las file
                         path_las_dir = os.path.join(save_path, 'w_towers_40x40')
                         file = 'tower_' + DATASET_NAME + '_' + fileName + '_w' + str(w)
-                        store_las_file_from_pc(coords_pc_class[:, bool_w], file, path_las_dir)
+                        store_las_file_from_pc(coords_pc_class[:, bool_w], file, path_las_dir, dataset)
 
     print('Total amount of window point clouds with towers:', count)
 
 
-def store_las_file_from_pc(pc, fileName, path_las_dir):
+def store_las_file_from_pc(pc, fileName, path_las_dir, dataset):
     # 1. Create a new header
     header = laspy.LasHeader(point_format=3, version="1.4")  # we need this format for processing with PDAL
     # header.add_extra_dim(laspy.ExtraBytesParams(name="nir_extra", type=np.int32))
@@ -215,12 +210,12 @@ def store_las_file_from_pc(pc, fileName, path_las_dir):
     las.z = pc[2].astype(np.int32)
     p_class = pc[3].astype(np.int8)
     las.intensity = pc[4].astype(np.int16)
-    las.return_number = pc[5].astype(np.int8)
-    las.number_of_returns = pc[6].astype(np.int8)
-    las.red = pc[7].astype(np.int16)
-    las.green = pc[8].astype(np.int16)
-    las.blue = pc[9].astype(np.int16)
-    # las.nir_extra = pc[10]
+    las.red = pc[5].astype(np.int16)
+    las.green = pc[6].astype(np.int16)
+    las.blue = pc[7].astype(np.int16)
+    # las.return_number = pc[5].astype(np.int8)
+    # las.number_of_returns = pc[6].astype(np.int8)
+
     # Classification unsigned char 1 byte (max is 31)
     p_class[p_class == 135] = 30
     p_class[p_class == 106] = 31
@@ -230,15 +225,16 @@ def store_las_file_from_pc(pc, fileName, path_las_dir):
         os.makedirs(path_las_dir)
     las.write(os.path.join(path_las_dir, fileName + ".las"))
 
-    # Store NIR with hash ID
-    nir = {}
-    for i in range(pc.shape[1]):
-        mystring = str(int(pc[0, i])) + '_' + str(int(pc[1, i])) + '_' + str(int(pc[2, i]))
-        hash_object = hashlib.md5(mystring.encode())
-        nir[hash_object.hexdigest()] = int(pc[10, i])
+    if dataset != 'BDN': # BDN data do not have NIR
+        # Store NIR with hash ID
+        nir = {}
+        for i in range(pc.shape[1]):
+            mystring = str(int(pc[0, i])) + '_' + str(int(pc[1, i])) + '_' + str(int(pc[2, i]))
+            hash_object = hashlib.md5(mystring.encode())
+            nir[hash_object.hexdigest()] = int(pc[8, i])
 
-    with open(os.path.join(path_las_dir, fileName + '_NIR.pkl'), 'wb') as f:
-        pickle.dump(nir, f)
+        with open(os.path.join(path_las_dir, fileName + '_NIR.pkl'), 'wb') as f:
+            pickle.dump(nir, f)
 
 
 def get_points_without_object(selClass, path='', center_t={}, dataset=''):
@@ -259,22 +255,23 @@ def get_points_without_object(selClass, path='', center_t={}, dataset=''):
         for f in files:
             name_f = f.split('/')[-1].split('.')[0]
             las_pc = laspy.read(f)
-            if dataset == 'CAT3':
+            if dataset == 'CAT3' or dataset == 'RIBERA':
                 nir = las_pc.nir
-            elif dataset == 'RIBERA':
-                nir = las_pc.nir
-                # hag = las_pc.HeightAboveGround
+                red = las_pc.red
+                green = las_pc.green
+                blue = las_pc.blue
             elif dataset == 'BDN':
                 nir = np.zeros(len(las_pc))
+                red = np.zeros(len(las_pc))
+                green = np.zeros(len(las_pc))
+                blue = np.zeros(len(las_pc))
 
             points = np.vstack((las_pc.x, las_pc.y, las_pc.z, las_pc.classification,
-                                         las_pc.intensity,
-                                         las_pc.return_number,
-                                         las_pc.number_of_returns,
-                                         las_pc.red,
-                                         las_pc.green,
-                                         las_pc.blue,
-                                         nir))
+                                las_pc.intensity,
+                                red, green, blue,
+                                nir))
+            # las_pc.return_number,
+            # las_pc.number_of_returns,
 
             # get blocks that contained towers
             if selClass in set(points[3]):
@@ -285,14 +282,15 @@ def get_points_without_object(selClass, path='', center_t={}, dataset=''):
                 # Get LAS files not containing towers
                 block_pc = points
                 c_no_t += 1
-            split_pointCloud(block_pc, f_name=name_f, dir=dir_name, path=save_path, w_size=[40, 40], c_tow=center_t)
+            split_pointCloud(block_pc, f_name=name_f, dir=dir_name, path=save_path, w_size=[40, 40], c_tow=center_t,
+                             dataset=dataset)
             bar()
 
     print(f'LAS files filtered towers: {c_filter}')
     print(f'LAS files no towers: {c_no_t}')
 
 
-def split_pointCloud(point_cloud, f_name='', dir='w_no_towers_40x40', path='', w_size=[40, 40], c_tow={}):
+def split_pointCloud(point_cloud, f_name='', dir='w_no_towers_40x40', path='', w_size=[40, 40], c_tow={}, dataset=''):
     """ Split point cloud into windows of size w_size.
 
         :param point_cloud is a dict of point clouds blocks of 1km x 1km
@@ -340,7 +338,7 @@ def split_pointCloud(point_cloud, f_name='', dir='w_no_towers_40x40', path='', w
                     # store las file
                     path_las_dir = os.path.join(path, dir)
                     file = 'pc_' + DATASET_NAME + '_' + f_name + '_w' + str(i_w)
-                    store_las_file_from_pc(coords[:, bool_w], file, path_las_dir)
+                    store_las_file_from_pc(coords[:, bool_w], file, path_las_dir, dataset)
                     i_w += 1
                     # Store point cloud of window in pickle
                     # stored_f = os.path.join(path, dir, 'pc_' + DATASET_NAME + '_' + f_name + '_w' + str(i_w) + '.pkl')
@@ -356,7 +354,7 @@ def split_pointCloud(point_cloud, f_name='', dir='w_no_towers_40x40', path='', w
                     if coords[:, bool_w].shape[1] > 0:
                         stored_f = 'pc_' + DATASET_NAME + '_' + f_name + '_w' + str(i_w) + 'overlap'
                         path_las_dir = os.path.join(path, dir)
-                        store_las_file_from_pc(coords[:, bool_w], stored_f, path_las_dir)
+                        store_las_file_from_pc(coords[:, bool_w], stored_f, path_las_dir, dataset)
                         # with open(stored_f, 'wb') as f:
                         #     pickle.dump(coords[:, bool_w], f)
                         overlap_w += 1
@@ -372,7 +370,7 @@ if __name__ == '__main__':
     # DATASET_NAME = 'CAT3'
     # DATASET_NAME = 'BDN'
 
-    DATASETS = ['CAT3']
+    DATASETS = ['BDN']
 
     for DATASET_NAME in DATASETS:
 
