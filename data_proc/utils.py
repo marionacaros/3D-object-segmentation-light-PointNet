@@ -81,61 +81,7 @@ def plot_2d_coords(coords, ax=[], save_plot=False, point_size=40, figsize=[10, 5
         ax.title.set_text('Points=%i' % (len(coords[1])))
 
 
-def sliding_window(point_cloud, stepSize_x=10, stepSize_y=10, windowSize=[20, 20], min_points=60, show_prints=False):
-    # slide a window across the point cloud
-    i = 0
-    towers = {}
-    x_min, y_min, z_min = point_cloud.header.min
-    x_max, y_max, z_max = point_cloud.header.max
-
-    coords = np.vstack((point_cloud.x, point_cloud.y, point_cloud.z))
-
-    # if window is larger than actual point cloud it means that in the point cloud there is only one tower
-    if windowSize[0] > (x_max - x_min) or windowSize[1] > (y_max - y_min):
-        towers[i] = coords
-        if show_prints:
-            print('Window larger than point cloud --> Only one tower found')
-        return towers
-
-    else:
-        for y in progressbar(range(round(y_min), round(y_max), stepSize_y)):
-            # check if there are points in this range of y
-            bool_w_y = np.logical_and(coords[1] < (y + windowSize[1]), coords[1] > y)
-            if not any(bool_w_y):
-                continue
-
-            for x in range(round(x_min), round(x_max), stepSize_x):
-                i += 1
-                # check points i window
-                bool_w_x = np.logical_and(coords[0] < (x + windowSize[0]), coords[0] > x)
-                if not any(bool_w_x):
-                    continue
-                bool_w = np.logical_and(bool_w_x, bool_w_y)
-                if not any(bool_w):
-                    continue
-                # get coords of points in window
-                window = coords[:, bool_w]
-                if show_prints:
-                    print('window %i --> %s points' % (i, str(window.shape)))
-
-                if window.shape[1] >= min_points:
-                    # if not first item in dict
-                    if len(towers) > 0:
-                        # if consecutive windows overlap
-                        if list(towers)[-1] == i - 1 or list(towers)[-1] == i - 2:
-                            # if more points in new window -> store w, otherwise do not store
-                            if window.shape[1] > towers[list(towers)[-1]].shape[1]:
-                                towers[list(towers)[-1]] = window
-                            if show_prints:
-                                print('FINAL window %i --> %s points' % (list(towers)[-1], str(window.shape)))
-                        else:
-                            towers[i] = window
-                    else:
-                        towers[i] = window
-        return towers
-
-
-def sliding_window_coords(point_cloud, stepSize_x=10, stepSize_y=10, windowSize=[20, 20], min_points=20,
+def sliding_window_coords(point_cloud, stepSize_x=10, stepSize_y=10, windowSize=[20, 20], min_points=10,
                           show_prints=False):
     """
     Slide a window across the coords of the point cloud to segment objects.
@@ -166,7 +112,7 @@ def sliding_window_coords(point_cloud, stepSize_x=10, stepSize_y=10, windowSize=
     if windowSize[0] > (x_max - x_min) and windowSize[1] > (y_max - y_min):
         if show_prints:
             print('Window larger than point cloud')
-        if point_cloud.shape[1] > min_points:
+        if point_cloud.shape[1] >= min_points:
             towers[0] = point_cloud
             # get center of window
             center_w[0] = [point_cloud[0].mean(), point_cloud[1].mean()]
@@ -194,7 +140,7 @@ def sliding_window_coords(point_cloud, stepSize_x=10, stepSize_y=10, windowSize=
                 # get coords of points in window
                 window = point_cloud[:, bool_w]
 
-                if window.shape[1] > min_points:
+                if window.shape[1] >= min_points:
                     # if not first item in dict
                     if len(towers) > 0:
                         # if consecutive windows overlap

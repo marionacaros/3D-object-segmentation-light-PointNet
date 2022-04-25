@@ -7,6 +7,29 @@ import sys
 import torch
 
 
+def collate_fn_padd(batch):
+    '''
+    Padds batch of variable length
+
+    note: it converts things ToTensor manually here since the ToTensor transform
+    assume it takes in images rather than arbitrary tensors.
+    '''
+    # get sequence lengths
+    # lengths = torch.tensor([t[0].shape[0] for t in batch]).to(device)
+    targets = [torch.LongTensor(t[1]) for t in batch]
+    batch_data = [torch.Tensor(t[0]) for t in batch]
+    # padd
+    targets = torch.nn.utils.rnn.pad_sequence(targets)
+    batch_data = torch.nn.utils.rnn.pad_sequence(batch_data)
+
+    # file names
+    filenames = [t[2] for t in batch]
+
+    # compute mask
+    # mask = (batch_data != 0)
+    return batch_data, targets, filenames
+
+
 def blockPrint():
     # Disable
     sys.stdout = open(os.devnull, 'w')
