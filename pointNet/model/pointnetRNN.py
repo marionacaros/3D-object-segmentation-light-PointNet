@@ -136,7 +136,7 @@ class RNNSegmentationPointNet(nn.Module):
         self.hidden_size = hidden_size
         self.base_pointnet = BasePointNet(return_local_features=True, point_dimension=point_dimension)
 
-        self.conv_1 = nn.Conv1d(576, 256, 1)
+        self.conv_1 = nn.Conv1d(320, 256, 1)  # 576 if bidirectional GRU
         self.conv_2 = nn.Conv1d(256, 128, 1)
         self.conv_3 = nn.Conv1d(128, 64, 1)
 
@@ -146,7 +146,7 @@ class RNNSegmentationPointNet(nn.Module):
         self.bn_2 = nn.BatchNorm1d(128)
         self.bn_3 = nn.BatchNorm1d(64)
 
-        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True, bidirectional=True)
+        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True, bidirectional=False)  # todo test
         self.fc = nn.Linear(hidden_size, num_classes)
         self.softmax = nn.LogSoftmax(dim=-1)
 
@@ -159,7 +159,7 @@ class RNNSegmentationPointNet(nn.Module):
 
         global_feat_rnn, hidden = self.gru(global_feature, hidden)
 
-        global_feat_rnn = global_feat_rnn.view(-1, 512, 1).repeat(1, 1, num_points)  # [batch, 1024, n_points]
+        global_feat_rnn = global_feat_rnn.view(-1, 256, 1).repeat(1, 1, num_points)  # todo test # [batch, 1024, n_points]
         local_global_rnn = torch.cat([global_feat_rnn.transpose(2, 1), local_features], 2)
 
         # local_global_rnn  # [batch, n_points, 1088]
@@ -177,7 +177,7 @@ class RNNSegmentationPointNet(nn.Module):
     def initHidden(self, x):
         """tensor of shape (D * {num_layers}, N, H_out) containing the initial hidden state for the input sequence.
         Defaults to zeros if not provided """
-        return torch.zeros(2, x.shape[0], self.hidden_size, device='cuda')  # [layers, x.size[0], hidden]
+        return torch.zeros(1, x.shape[0], self.hidden_size, device='cuda')  # [layers, x.size[0], hidden]
 
 
 class SegmentationPointNet(nn.Module):
@@ -186,14 +186,14 @@ class SegmentationPointNet(nn.Module):
         super(SegmentationPointNet, self).__init__()
         self.base_pointnet = BasePointNet(return_local_features=True, point_dimension=point_dimension)
 
-        self.conv_1 = nn.Conv1d(1088, 512, 1)
-        self.conv_2 = nn.Conv1d(512, 256, 1)
-        self.conv_3 = nn.Conv1d(256, 128, 1)
-        self.conv_4 = nn.Conv1d(128, num_classes, 1)
+        self.conv_1 = nn.Conv1d(320, 256, 1)
+        self.conv_2 = nn.Conv1d(256, 128, 1)
+        self.conv_3 = nn.Conv1d(128, 64, 1)
+        self.conv_4 = nn.Conv1d(64, num_classes, 1)
 
-        self.bn_1 = nn.BatchNorm1d(512)
-        self.bn_2 = nn.BatchNorm1d(256)
-        self.bn_3 = nn.BatchNorm1d(128)
+        self.bn_1 = nn.BatchNorm1d(256)
+        self.bn_2 = nn.BatchNorm1d(128)
+        self.bn_3 = nn.BatchNorm1d(64)
 
     def forward(self, x):
         local_global_features, feature_transform = self.base_pointnet(x)
@@ -206,4 +206,4 @@ class SegmentationPointNet(nn.Module):
         x = self.conv_4(x)
         x = x.transpose(2, 1)
 
-        return F.log_softmax(x, dim=-1), feature_transform, local_global_features
+        return F.log_softmax(x, dim=-1), feature_transform
