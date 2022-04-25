@@ -13,55 +13,57 @@ class LidarDataset(data.Dataset):
     POINT_DIMENSION = 2
     NUM_SEGMENTATION_CLASSES = 2
 
-    def __init__(self, dataset_folder, task='classification', number_of_points=None, files_segmentation=None,
+    def __init__(self, dataset_folder, task='classification', number_of_points=None,
+                 towers_files=None,
+                 landscape_files=None,
                  fixed_num_points=True):
-        self.dataset_folder = dataset_folder
+        self.dataset_folder = dataset_folder  # /dades/LIDAR/towers_detection/datasets/
         self.number_of_points = number_of_points
         self.task = task
-        self.files_segmentation = files_segmentation
+        self.tower_files = towers_files
+        self.landscape_files = landscape_files
         self.fixed_num_points = fixed_num_points
 
-        category_file = '/dades/LIDAR/towers_detection/datasets/dataFolders.txt'
-        self.folders_to_classes_mapping = {}
-        with open(category_file, 'r') as fid:
-            reader = csv.reader(fid, delimiter='\t')
-            for k, row in enumerate(reader):
-                self.folders_to_classes_mapping[row[0]] = k
+        # category_file = '/dades/LIDAR/towers_detection/datasets/dataFolders.txt'
+        # self.folders_to_classes_mapping = {}
+        # with open(category_file, 'r') as fid:
+        #     reader = csv.reader(fid, delimiter='\t')
+        #     for k, row in enumerate(reader):
+        #         self.folders_to_classes_mapping[row[0]] = k
 
         if task == 'classification':
-            self.paths_towers_files = glob.glob(os.path.join(self.dataset_folder, 'towers_2000/*.pkl'))
-            self.len_towers = len(self.paths_towers_files)
-            self.paths_landscape_files = glob.glob(os.path.join(self.dataset_folder, 'landscape_2000/*.pkl'))
-            self.len_landscape = len(self.paths_landscape_files)
-            self.paths_files = self.paths_towers_files + self.paths_landscape_files
+            self.len_towers = len(self.tower_files)
+            self.len_landscape = len(self.landscape_files)
+            self.paths_files = self.tower_files + self.landscape_files
             self.files = [(f.split('/')[-2], f.split('/')[-1]) for f in self.paths_files]
 
         elif task == 'segmentation':
-            self.paths_files = self.files_segmentation  # glob.glob(os.path.join(self.dataset_folder, '*.pkl'))
-            self.files = [(f.split('/')[-2], f.split('/')[-1]) for f in self.paths_files]
+            self.paths_towers = [dataset_folder + '/pc_towers_40x40/data_no_ground/' + f for f in self.tower_files]
+            self.paths_landscape = [dataset_folder + '/pc_no_towers_40x40/data_no_ground/' + f for f in
+                                    self.landscape_files]
+            self.paths_files = self.paths_towers + self.paths_landscape
 
     def __len__(self):
         return len(self.paths_files)
 
     def __getitem__(self, index):
-        folder, file = self.files[index]
-        point_cloud_class=None
+        point_cloud_class = None
         if self.task == 'classification':
-            point_cloud_class = self.folders_to_classes_mapping[folder] # needed for classification
+            folder, file = self.paths_files[index]
+            point_cloud_class = self.folders_to_classes_mapping[folder]  # needed for classification
             # 0 -> no tower
             # 1 -> tower
         return self.prepare_data(self.paths_files[index],
                                  self.number_of_points,
                                  fixed_num_points=self.fixed_num_points,
                                  point_cloud_class=point_cloud_class,
-                                 fileName=file,
                                  task=self.task)
+
     @staticmethod
     def prepare_data(point_file,
                      number_of_points=None,
                      point_cloud_class=None,
                      fixed_num_points=True,
-                     fileName='',
                      task='classification'):
 
         with open(point_file, 'rb') as f:
@@ -81,7 +83,7 @@ class LidarDataset(data.Dataset):
 
         pc = torch.from_numpy(pc)
         labels = torch.tensor(labels)
-        return pc, labels, fileName
+        return pc, labels, point_file
 
 
 class BdnDataset(data.Dataset):
@@ -114,6 +116,7 @@ class BdnDataset(data.Dataset):
                                  self.number_of_points,
                                  point_cloud_class=point_cloud_class,
                                  fileName=file)
+
     @staticmethod
     def prepare_data(point_file,
                      number_of_points=None,
