@@ -26,18 +26,8 @@ def test(dataset_folder,
          model_checkpoint):
     start_time = time.time()
     logging.info(f"Weighing method: {weighing_method}")
-    BETA = 0.999
-    batch_size = 1
 
     checkpoint = torch.load(model_checkpoint)
-
-    # Tensorboard location and plot names
-    # now = datetime.datetime.now()
-    # location = 'runs/tower_detec/' + str(number_of_points) + 'points/'
-    # if not os.path.isdir(output_folder):
-    #     os.mkdir(output_folder)
-    # writer_test = SummaryWriter(location + now.strftime("%m-%d-%H:%M_") + weighing_method + '_train')
-    # logging.info(f"Tensorboard runs: {writer_test.get_logdir()}")
 
     # Datasets train / test
     train_dataset = LidarDataset(os.path.join(dataset_folder, 'train'), task=task, number_of_points=number_of_points)
@@ -65,15 +55,9 @@ def test(dataset_folder,
                                                   shuffle=False,
                                                   num_workers=number_of_workers,
                                                   drop_last=False)
-    if task == 'classification':
-        model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
+    model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
                                        point_dimension=train_dataset.POINT_DIMENSION,
                                        dataset=train_dataset)
-    elif task == 'segmentation':
-        model = SegmentationPointNet(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
-                                     point_dimension=train_dataset.POINT_DIMENSION)
-    else:
-        raise Exception('Unknown task !')
 
     if torch.cuda.is_available():
         logging.info(f"cuda available")
@@ -90,7 +74,7 @@ def test(dataset_folder,
         fid.write('point_cloud,prob[0],prob[1],pred,target\n')
     with open(os.path.join(output_folder, 'wrong_predictions-%s.csv' % name), 'w+') as fid:
         fid.write('file_name,prob[0],prob[1],pred,target\n')
-    # files for segmentation
+    # store file names for segmentation
     with open(os.path.join(output_folder, 'files-segmentation-%s.csv' % name), 'w+') as fid:
         fid.write('file_name\n')
 
@@ -100,7 +84,6 @@ def test(dataset_folder,
     for data in progressbar(test_dataloader):
 
         pc, target, file_name = data  # [1, 2000, 9], [1]
-        # points = pc[:, :, :3]
         if torch.cuda.is_available():
             pc, target = pc.cuda(), target.cuda()
         model = model.eval()
@@ -137,16 +120,12 @@ def test(dataset_folder,
     epochs = checkpoint['epoch']
     print(f'Model trained for {epochs} epochs')
 
-    # targets = np.ones(len(targets)) - targets
-    # all_preds = np.ones(len(all_preds)) - all_preds
-
     # calculate F1 score
     lr_f1 = f1_score(targets, all_preds)
 
     all_probs = np.array(all_probs).transpose()  # [2, len(test data)]
     # keep probabilities for the positive outcome only
     lr_probs = all_probs[1]
-
     lr_precision, lr_recall, thresholds = precision_recall_curve(targets, lr_probs)
     lr_auc = auc(lr_recall, lr_precision)
 
@@ -172,7 +151,6 @@ def test(dataset_folder,
 
     data = {"lr_recall": str(list(lr_recall)),
             "lr_precision": str(list(lr_precision))}
-
     with open('json_files/precision-recall-%s.json' % name, 'w') as f:
         json.dump(data, f)
 

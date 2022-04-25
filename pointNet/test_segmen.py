@@ -1,14 +1,11 @@
 import argparse
 import glob
-import pickle
 import time
-import numpy as np
 from progressbar import progressbar
 from torch.utils.data import random_split
 from datasets import LidarDataset, BdnDataset
 from model.pointnet import SegmentationPointNet
 import logging
-import datetime
 from utils import *
 import json
 import pandas as pd
@@ -26,7 +23,6 @@ def test(dataset_folder,
 
     checkpoint = torch.load(model_checkpoint)
 
-    # Datasets train / test
     path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:52sklearn0.999.pth.csv'
     df = pd.read_csv(path)
     no_towers_files = list(df['file_name'])
@@ -74,17 +70,13 @@ def test(dataset_folder,
         log_probs, feature_transform = model(pc)
         probs = torch.exp(log_probs.cpu().detach())  # [1, 2000, 2]
         probs = probs.cpu().numpy().reshape(2000, 2)
-
-        # .max(1) takes the max over dimension 1 and returns two values (the max value in each row and the column index
-        # at which the max value is found)
-        # pred = probs.max(1)[1]
+        # get max over dim 1
         preds = np.argmax(probs, axis=1)
         targets = targets.reshape(2000).cpu().numpy()
 
         # pc = pc.reshape(2000, -1)
         # preds = preds[..., np.newaxis]
         # pc = np.concatenate((pc.cpu().numpy(), preds), axis=1)
-        #
         # with open('results/segmentation/' + file_name[0] + '_pred.pkl', 'wb') as f:
         #     pickle.dump(pc, f)
 
@@ -93,7 +85,6 @@ def test(dataset_folder,
 
         # keep probabilities for the positive outcome only
         lr_probs = probs[:, 1]
-
         lr_precision, lr_recall, thresholds = precision_recall_curve(targets, lr_probs)
         lr_auc = auc(lr_recall, lr_precision)
 
@@ -124,7 +115,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
     parser.add_argument('output_folder', type=str, help='output folder')
-    parser.add_argument('--number_of_points', type=int, default=1000, help='number of points per cloud')
+    parser.add_argument('--number_of_points', type=int, default=2000, help='number of points per cloud')
     parser.add_argument('--number_of_workers', type=int, default=0, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
 
