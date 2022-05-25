@@ -3,8 +3,8 @@ import glob
 import time
 from progressbar import progressbar
 from torch.utils.data import random_split
-from datasets import LidarDataset, BdnDataset
-from model.pointnet import SegmentationPointNet
+from datasets import LidarDataset
+from model.light_pointnet_IGBVI import SegmentationPointNet_IGBVI
 import logging
 from utils import *
 import json
@@ -23,27 +23,27 @@ def test(dataset_folder,
 
     checkpoint = torch.load(model_checkpoint)
 
-    path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:52sklearn0.999.pth.csv'
-    df = pd.read_csv(path)
-    no_towers_files = list(df['file_name'])
-    logging.info(f'Samples without towers in train set: {len(no_towers_files) * 0.8}')
-    towers_files = glob.glob(os.path.join(dataset_folder, 'train/towers_2000/*.pkl'))
-    logging.info(f'Samples with towers in train set: {len(towers_files)}')
+    # path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-checkpoint_05-11-12:540.999.pth.csv'
+    # df = pd.read_csv(path)
+    # detected_positive = list(df['file_name'])
 
-    test_files = glob.glob(os.path.join(dataset_folder, 'test/towers_2000/*.pkl')) + \
-                 no_towers_files[round(0.9 * len(no_towers_files)):]
+    with open('../data/RGBN/RGBN_test_moved_towers_files.txt', 'r') as f:
+        tower_files = f.read().splitlines()
+    with open('../data/RGBN/RGBN_test_landscape_files.txt', 'r') as f:
+        landscape_files = f.read().splitlines()
 
-    test_dataset = LidarDataset(dataset_folder,  task='segmentation',
-                                 number_of_points=number_of_points,
-                                 files_segmentation=test_files)
-
+    test_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'test', 'filtered'),
+                                          task='segmentation', number_of_points=number_of_points,
+                                          towers_files = tower_files,
+                                          landscape_files = landscape_files,
+                                          fixed_num_points = True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset,
                                                   batch_size=1,
                                                   shuffle=False,
                                                   num_workers=number_of_workers,
                                                   drop_last=False)
 
-    model = SegmentationPointNet(num_classes=test_dataset.NUM_SEGMENTATION_CLASSES,
+    model = SegmentationPointNet_IGBVI(num_classes=test_dataset.NUM_SEGMENTATION_CLASSES,
                                  point_dimension=test_dataset.POINT_DIMENSION)
 
     if torch.cuda.is_available():
@@ -69,10 +69,10 @@ def test(dataset_folder,
 
         log_probs, feature_transform = model(pc)
         probs = torch.exp(log_probs.cpu().detach())  # [1, 2000, 2]
-        probs = probs.cpu().numpy().reshape(2000, 2)
+        probs = probs.cpu().numpy().reshape(2048, 2)
         # get max over dim 1
         preds = np.argmax(probs, axis=1)
-        targets = targets.reshape(2000).cpu().numpy()
+        targets = targets.reshape(2048).cpu().numpy()
 
         # pc = pc.reshape(2000, -1)
         # preds = preds[..., np.newaxis]
@@ -96,7 +96,7 @@ def test(dataset_folder,
 
         # summarize scores
         print(file_name[0])
-        print(f'Ptg corrects: {(corrects.sum()/2000)*100}%')
+        print(f'Ptg corrects: {(corrects.sum()/2048)*100}%')
         print('Logistic: f1=%.3f auc=%.3f' % (lr_f1, lr_auc))
         print('All positive: ', all_positive)
         print('-------------')
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
     parser.add_argument('output_folder', type=str, help='output folder')
-    parser.add_argument('--number_of_points', type=int, default=2000, help='number of points per cloud')
+    parser.add_argument('--number_of_points', type=int, default=2048, help='number of points per cloud')
     parser.add_argument('--number_of_workers', type=int, default=0, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
 

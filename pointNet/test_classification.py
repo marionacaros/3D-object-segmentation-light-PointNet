@@ -2,13 +2,14 @@ import argparse
 import glob
 import time
 
-import matplotlib.pyplot as plt
 from progressbar import progressbar
 from torch.utils.data import random_split
-from datasets import LidarDataset, BdnDataset
-from model.pointnet import ClassificationPointNet, SegmentationPointNet
+from datasets import LidarDataset
+# from model.light_pointnet import ClassificationPointNet
+# from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI
+from model.pointnet import *
+
 import logging
-import datetime
 from utils import *
 import json
 
@@ -30,34 +31,45 @@ def test(dataset_folder,
     checkpoint = torch.load(model_checkpoint)
 
     # Datasets train / test
-    train_dataset = LidarDataset(os.path.join(dataset_folder, 'train'), task=task, number_of_points=number_of_points)
-    logging.info(f'Samples for training: {len(train_dataset)}')
+    RGBN = True
+    if RGBN:
+        with open('pointNet/data/RGBN/RGBN_test_moved_towers_files.txt', 'r') as f:
+            tower_files = f.read().splitlines()
+        with open('pointNet/data/RGBN/RGBN_test_landscape_files.txt', 'r') as f:
+            landscape_files = f.read().splitlines()
+    else:
+        with open('pointNet/data/test_moved_towers_files.txt', 'r') as f:
+            tower_files = f.read().splitlines()
+        with open('pointNet/data/test_landscape_files.txt', 'r') as f:
+            landscape_files = f.read().splitlines()
 
-    towers_files = glob.glob(os.path.join(dataset_folder, 'test/towers_2000/*.pkl'))
-    test_dataset = LidarDataset('', task=task, number_of_points=number_of_points,
-                                          files_segmentation=towers_files)
+    path_dataset = os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_2048')
+    logging.info(f'Dataset path: {path_dataset}')
+
+    test_dataset = LidarDataset(dataset_folder=path_dataset,
+                                          task=task, number_of_points=number_of_points,
+                                          towers_files = tower_files,
+                                          landscape_files = landscape_files,
+                                          fixed_num_points = True)
+
     logging.info(f'Samples for validation: {len(test_dataset)}')
-
-    logging.info(f'Task: {train_dataset.task}')
-    logging.info(f'Samples with towers in TRAIN: {train_dataset.len_towers}')
-    logging.info(f'Samples without towers in TRAIN: {train_dataset.len_landscape}')
     logging.info(f'Samples with towers in TEST: {test_dataset.len_towers}')
     logging.info(f'Samples without towers in TEST: {test_dataset.len_landscape}')
 
-    # if using BDN dataset to test (only models without intensity or RGB)
-    # bdn_dataset = BdnDataset(dataset_folder, task=task, number_of_points=number_of_points)
-    # test_dataset = torch.utils.data.ConcatDataset([test_dataset, bdn_dataset])
-    # l_test = len(test_dataset)
-    # logging.info(f'Samples test dataset + BDN dataset: {l_test}')
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset,
                                                   batch_size=1,
                                                   shuffle=False,
                                                   num_workers=number_of_workers,
                                                   drop_last=False)
-    model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
-                                       point_dimension=train_dataset.POINT_DIMENSION,
-                                       dataset=train_dataset)
+    if RGBN:
+        model = ClassificationPointNet(num_classes=test_dataset.NUM_CLASSIFICATION_CLASSES,
+                                       point_dimension=test_dataset.POINT_DIMENSION,
+                                       dataset=test_dataset)
+    else:
+        model = ClassificationPointNet(num_classes=test_dataset.NUM_CLASSIFICATION_CLASSES,
+                                       point_dimension=test_dataset.POINT_DIMENSION,
+                                       dataset=test_dataset)
 
     if torch.cuda.is_available():
         logging.info(f"cuda available")
@@ -70,17 +82,21 @@ def test(dataset_folder,
 
     name = model_checkpoint.split('/')[-1]
     print(name)
-    with open(os.path.join(output_folder, 'results-%s.csv' % name), 'w+') as fid:
-        fid.write('point_cloud,prob[0],prob[1],pred,target\n')
+    # with open(os.path.join(output_folder, 'results-%s.csv' % name), 'w+') as fid:
+    #     fid.write('point_cloud,prob[0],prob[1],pred,target\n')
     with open(os.path.join(output_folder, 'wrong_predictions-%s.csv' % name), 'w+') as fid:
         fid.write('file_name,prob[0],prob[1],pred,target\n')
-    # store file names for segmentation
-    with open(os.path.join(output_folder, 'files-segmentation-%s.csv' % name), 'w+') as fid:
+    with open(os.path.join(output_folder, 'results-positives-%s.csv' % name), 'w+') as fid:
         fid.write('file_name\n')
+    # store file names for segmentation
+    # with open(os.path.join(output_folder, 'files-segmentation-%s.csv' % name), 'w+') as fid:
+    #     fid.write('file_name\n')
 
     all_preds = []
     all_probs = []
     targets = []
+    targets_real = []
+
     for data in progressbar(test_dataloader):
 
         pc, target, file_name = data  # [1, 2000, 9], [1]
@@ -99,6 +115,8 @@ def test(dataset_folder,
 
         # if other tower classified as tower we count it as correct
         clases = pc[:, :, 3].view(-1).cpu().numpy().astype('int')
+
+        targets_real.append(target.item())
         if 16 in set(clases) and pred.item() == 1:
             targets.append(1)
         else:
@@ -106,26 +124,26 @@ def test(dataset_folder,
 
         if target.item() == 1 or pred.item() == 1:
             with open(os.path.join(output_folder, 'results-positives-%s.csv' % name), 'a') as fid:
-                fid.write('%s,%s,%s,%s,%s\n' % (
-                file_name[0], probs[0, 0].item(), probs[0, 1].item(), pred.item(), target.item()))
+                fid.write('%s\n' % (file_name[0].split('/')[-1]))
 
         if pred.item() != target.item():
             # print(f'Wrong prediction in: {file_name}')
             with open(os.path.join(output_folder, 'wrong_predictions-%s.csv' % name), 'a') as fid:
                 fid.write('%s,%s,%s,%s,%s\n' % (file_name[0], probs[0,0].item(), probs[0,1].item(), pred.item(), target.item()))
-            if target.item() == 0:
-                with open(os.path.join(output_folder, 'files-segmentation-%s.csv' % name), 'a') as fid:
-                    fid.write('/dades/LIDAR/towers_detection/datasets/test/landscape_2000/%s\n' % (file_name[0]))
+            # if target.item() == 0:
+            #     with open(os.path.join(output_folder, 'files-segmentation-%s.csv' % name), 'a') as fid:
+            #         fid.write('%s\n' % (file_name[0]))
 
     epochs = checkpoint['epoch']
     print(f'Model trained for {epochs} epochs')
+    print('--------  considering ALL TOWERS as correct -------')
 
+    # --------  considering all type of towers detected as correct -------
     # calculate F1 score
     lr_f1 = f1_score(targets, all_preds)
 
-    all_probs = np.array(all_probs).transpose()  # [2, len(test data)]
     # keep probabilities for the positive outcome only
-    lr_probs = all_probs[1]
+    lr_probs = np.array(all_probs).transpose()[1] # [2, len(test data)]
     lr_precision, lr_recall, thresholds = precision_recall_curve(targets, lr_probs)
     lr_auc = auc(lr_recall, lr_precision)
 
@@ -142,6 +160,31 @@ def test(dataset_folder,
     print('TP: ', tp)
     print('FP: ', fp)
 
+    # --------  considering ONLY TRANSMISSION TOWERS as correct -------
+
+    print('--------  considering ONLY TRANSMISSION TOWERS as correct -------')
+    # calculate F1 score
+    lr_f1 = f1_score(targets_real, all_preds)
+
+    # keep probabilities for the positive outcome only
+    lr_probs = np.array(all_probs).transpose()[1] # [2, len(test data)]
+    lr_precision, lr_recall, thresholds = precision_recall_curve(targets_real, lr_probs)
+    lr_auc = auc(lr_recall, lr_precision)
+
+    corrects = (np.array(all_preds) == np.array(targets_real))  # boolean with matched predictions
+    detected_positive = (np.array(all_preds) == np.ones(len(all_preds)))  # boolean with positions of 1s
+    all_positive = (np.array(targets_real) == np.ones(len(targets_real))).sum()  # TP + FN
+
+    tp = np.logical_and(corrects, detected_positive).sum()
+    fp = detected_positive.sum() - tp
+
+    # summarize scores
+    print('Logistic: f1=%.3f auc=%.3f' % (lr_f1, lr_auc))
+    print('All positive: ', all_positive)
+    print('TP: ', tp)
+    print('FP: ', fp)
+
+
     if task == 'classification':
         print(f'Accuracy: {round(corrects.sum() / len(test_dataset) * 100, 2)} %')
         # Recall - Del total de torres, quin percentatge s'han trobat?
@@ -151,7 +194,7 @@ def test(dataset_folder,
 
     data = {"lr_recall": str(list(lr_recall)),
             "lr_precision": str(list(lr_precision))}
-    with open('json_files/precision-recall-%s.json' % name, 'w') as f:
+    with open('pointNet/json_files/precision-recall-%s.json' % name, 'w') as f:
         json.dump(data, f)
 
     print("--- TOTAL TIME: %s min ---" % (round((time.time() - start_time) / 60, 3)))
@@ -181,3 +224,5 @@ if __name__ == '__main__':
          args.output_folder,
          args.number_of_workers,
          args.model_checkpoint)
+
+# python pointNet/test_classification.py /dades/LIDAR/towers_detection/datasets classification pointNet/results/ --weighing_method EFS --number_of_points 2048 --number_of_workers 0 --model_checkpoint /home/m.caros/work/objectDetection/pointNet/checkpoints/checkpoint_05-11-12:540.999.pth
