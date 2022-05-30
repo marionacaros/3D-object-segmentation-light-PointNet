@@ -1,1 +1,2 @@
-python train.py lidar /dades/LIDAR/towers_detection/datasets classification results/ --batch_size 32 --epochs 200 --learning_rate 0.001 --weighing_method EFS --number_of_points 2000 --number_of_workers 4
+python pointNet/train.py  /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 100 --learning_rate 0.001 --weighing_method EFS --number_of_points 4096 --number_of_workers 4 --sample True
+python pointNet/train_all_points.py lidar /dades/LIDAR/towers_detection/datasets segmentation results/ --batch_size 32 --epochs 200 --learning_rate 0.001 --weighing_method EFS --number_of_points 256 --number_of_workers 4 --use_rnn
