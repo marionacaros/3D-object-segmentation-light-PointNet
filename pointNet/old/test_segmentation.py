@@ -35,9 +35,9 @@ def test(dataset_folder,
     mean_iou_tower = []
     mean_iou_veg = []
     points_needed=0
-    with open('pointNet/data/RGBN/RGBN_test_moved_towers_files.txt', 'r') as f:
+    with open('../data/RGBN/RGBN_test_moved_towers_files.txt', 'r') as f:
         tower_files = f.read().splitlines()
-    with open('pointNet/data/RGBN/RGBN_test_landscape_files.txt', 'r') as f:
+    with open('../data/RGBN/RGBN_test_landscape_files.txt', 'r') as f:
         landscape_files = f.read().splitlines()
 
     logging.info(f'Samples with towers: {len(tower_files)}')
