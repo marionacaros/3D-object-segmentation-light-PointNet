@@ -40,9 +40,9 @@ class TransformationNet(nn.Module):
         identity_matrix = torch.eye(self.output_dim)
         if torch.cuda.is_available():
             identity_matrix = identity_matrix.cuda()
-        x = x.view(-1, self.output_dim, self.output_dim) + identity_matrix
+        x = x.view(-1,
+                   self.output_dim, self.output_dim) + identity_matrix
         return x
-
 
 class BasePointNet(nn.Module):
 
@@ -55,7 +55,7 @@ class BasePointNet(nn.Module):
 
         # self.conv_1 = nn.Conv1d(point_dimension, 64, 1)
         self.conv_1 = nn.Conv1d(7, 64, 1)  # changed from 3 ch to 7 channels to take I, NDVI, RGB into account
-        # self.conv_1 = nn.Conv1d(3, 64, 1)
+        # self.conv_1 = nn.Conv1d(4, 64, 1)
         self.conv_2 = nn.Conv1d(64, 64, 1)
         self.conv_3 = nn.Conv1d(64, 64, 1)
         self.conv_4 = nn.Conv1d(64, 128, 1)
@@ -74,8 +74,7 @@ class BasePointNet(nn.Module):
         input_transform = self.input_transform(x_tnet)
         x_tnet = torch.bmm(x_tnet, input_transform)  # Performs a batch matrix-matrix product
         x_tnet = torch.cat([x_tnet, x[:, :, 2].unsqueeze(2), x[:, :, 4].unsqueeze(2)], dim=2)  # concat z and intensity
-        x_tnet = torch.cat([x_tnet, x[:, :, 8].unsqueeze(2), x[:, :, 9].unsqueeze(2), x[:, :, 11].unsqueeze(2)],
-                           dim=2)  # concat Green Blue NDVI
+        x_tnet = torch.cat([x_tnet, x[:, :, 6].unsqueeze(2), x[:, :, 7].unsqueeze(2), x[:, :, 9].unsqueeze(2)], dim=2)  # concat Green Blue NDVI
         x_tnet = x_tnet.transpose(2, 1)  # [batch, dims, n_points]
 
         x = F.relu(self.bn_1(self.conv_1(x_tnet)))
@@ -136,7 +135,7 @@ class RNNSegmentationPointNet(nn.Module):
         self.hidden_size = hidden_size
         self.base_pointnet = BasePointNet(return_local_features=True, point_dimension=point_dimension)
 
-        self.conv_1 = nn.Conv1d(320, 256, 1)  # 576 if bidirectional GRU
+        self.conv_1 = nn.Conv1d(576, 256, 1)  # 576 if bidirectional GRU, otherwise 320
         self.conv_2 = nn.Conv1d(256, 128, 1)
         self.conv_3 = nn.Conv1d(128, 64, 1)
 
@@ -146,7 +145,7 @@ class RNNSegmentationPointNet(nn.Module):
         self.bn_2 = nn.BatchNorm1d(128)
         self.bn_3 = nn.BatchNorm1d(64)
 
-        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True, bidirectional=False)  # todo test
+        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True, bidirectional=True)  # todo test bidirectional
         self.fc = nn.Linear(hidden_size, num_classes)
         self.softmax = nn.LogSoftmax(dim=-1)
 
@@ -159,7 +158,7 @@ class RNNSegmentationPointNet(nn.Module):
 
         global_feat_rnn, hidden = self.gru(global_feature, hidden)
 
-        global_feat_rnn = global_feat_rnn.view(-1, 256, 1).repeat(1, 1, num_points)  # todo test # [batch, 1024, n_points]
+        global_feat_rnn = global_feat_rnn.view(-1, 512, 1).repeat(1, 1, num_points)  # todo test global feature 512
         local_global_rnn = torch.cat([global_feat_rnn.transpose(2, 1), local_features], 2)
 
         # local_global_rnn  # [batch, n_points, 1088]
@@ -177,7 +176,7 @@ class RNNSegmentationPointNet(nn.Module):
     def initHidden(self, x):
         """tensor of shape (D * {num_layers}, N, H_out) containing the initial hidden state for the input sequence.
         Defaults to zeros if not provided """
-        return torch.zeros(1, x.shape[0], self.hidden_size, device='cuda')  # [layers, x.size[0], hidden]
+        return torch.zeros(2, x.shape[0], self.hidden_size, device='cuda')  # [layers, x.size[0], hidden]
 
 
 class SegmentationPointNet(nn.Module):
