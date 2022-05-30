@@ -7,7 +7,29 @@ import sys
 import torch
 
 
-def collate_fn_padd(batch):
+def collate_segmen_padd(batch):
+    '''
+    Padds batch of variable length
+
+    note: it converts things ToTensor manually here
+    '''
+    # get sequence lengths
+    # lengths = torch.tensor([t[0].shape[0] for t in batch]).to(device)
+    targets = [torch.LongTensor(t[1]) for t in batch]
+    batch_data = [torch.Tensor(t[0]) for t in batch]
+    # padd
+    targets = torch.nn.utils.rnn.pad_sequence(targets)
+    batch_data = torch.nn.utils.rnn.pad_sequence(batch_data)
+
+    # file names
+    filenames = [t[2] for t in batch]
+
+    # compute mask
+    # mask = (batch_data != 0)
+    return batch_data, targets, filenames
+
+
+def collate_classif_padd(batch):
     '''
     Padds batch of variable length
 
@@ -16,10 +38,11 @@ def collate_fn_padd(batch):
     '''
     # get sequence lengths
     # lengths = torch.tensor([t[0].shape[0] for t in batch]).to(device)
-    targets = [torch.LongTensor(t[1]) for t in batch]
+    targets = [t[1] for t in batch]
+    targets = torch.LongTensor(targets)
     batch_data = [torch.Tensor(t[0]) for t in batch]
     # padd
-    targets = torch.nn.utils.rnn.pad_sequence(targets)
+    # targets = torch.nn.utils.rnn.pad_sequence(targets)
     batch_data = torch.nn.utils.rnn.pad_sequence(batch_data)
 
     # file names
