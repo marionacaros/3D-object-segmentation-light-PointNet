@@ -6,30 +6,22 @@ from progressbar import progressbar
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
 from datasets import LidarDataset
-from model.pointnet import ClassificationPointNet, SegmentationPointNet
+from model.light_pointnet import ClassificationPointNet
+from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI
+# from model.pointnet import *
+
 import logging
 import datetime
 from sklearn.metrics import balanced_accuracy_score
 import warnings
 from utils import *
 import glob
-from torchsummary import summary
+from prettytable import PrettyTable
 
 warnings.filterwarnings('ignore')
 
-MODELS = {
-    'classification': ClassificationPointNet,
-    'segmentation': SegmentationPointNet
-}
-
-DATASETS = {
-    'lidar': LidarDataset
-}
-
-
-def train(dataset,
+def train(
           dataset_folder,
-          task,
           number_of_points,
           batch_size,
           epochs,
@@ -37,61 +29,78 @@ def train(dataset,
           weighing_method,
           output_folder,
           number_of_workers,
-          model_checkpoint):
+          model_checkpoint,
+          beta,
+          sampled,
+          RGBN = True):
 
     start_time = time.time()
-    logging.info(f"Dataset: {dataset}")
     logging.info(f"Weighing method: {weighing_method}")
-    BETA = 0.999
+    logging.info(f"Smart Sample: {sampled}")
 
     # Tensorboard location and plot names
     now = datetime.datetime.now()
-    location = 'runs/tower_detec/' + str(number_of_points) + 'p/'
-    if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
+    location = 'pointNet/runs/tower_detec/' + str(number_of_points) + 'p/'
+
+    if output_folder:
+        if not os.path.isdir(output_folder):
+            os.mkdir(output_folder)
 
     # Datasets train / val / test
-    if task == 'classification':
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_train' + 'B'+str(BETA))
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_val' + 'B'+str(BETA))
-        logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
+    if RGBN:
+        with open('pointNet/data/RGBN/RGBN_train_moved_towers_files.txt', 'r') as f:
+            tower_files_train = f.read().splitlines()
+        with open('pointNet/data/RGBN/RGBN_val_moved_towers_files.txt', 'r') as f:
+            tower_files_val = f.read().splitlines()
+        with open('pointNet/data/RGBN/RGBN_train_landscape_files.txt', 'r') as f:
+            bckg_files_train = f.read().splitlines()
+        with open('pointNet/data/RGBN/RGBN_val_landscape_files.txt', 'r') as f:
+            bckg_files_val = f.read().splitlines()
+    else:
+        with open('pointNet/data/val_moved_towers_files.txt', 'r') as f:
+            tower_files_val = f.read().splitlines()
+        with open('pointNet/data/train_moved_towers_files.txt', 'r') as f:
+            tower_files_train = f.read().splitlines()
+        with open('pointNet/data/train_landscape_files.txt', 'r') as f:
+            bckg_files_train = f.read().splitlines()
+        with open('pointNet/data/val_landscape_files.txt', 'r') as f:
+            bckg_files_val = f.read().splitlines()
 
-        train_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'train'), task=task, number_of_points=number_of_points)
-        val_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'val'), task=task, number_of_points=number_of_points)
+    logging.info(f'Samples with towers in train: {len(tower_files_train)}')
+    logging.info(f'Dataset folder: {dataset_folder}')
 
-        logging.info(f'Samples with towers in train: {train_dataset.len_towers}')
-        logging.info(f'Samples without towers in train: {train_dataset.len_landscape}')
-        logging.info(f'Proportion towers/landscape: {round((train_dataset.len_towers/train_dataset.len_landscape)*100,3)}%')
+    if RGBN:
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainRGBN_rdm'  + str(beta))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalRGBN_rdm'  + str(beta))
+    else:
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainI'  + str(beta))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalI'  + str(beta))
 
-        logging.info(f'Samples with towers in val: {val_dataset.len_towers}')
-        logging.info(f'Samples without towers in val: {val_dataset.len_landscape}')
-        logging.info(f'Proportion towers/landscape: {round((val_dataset.len_towers/val_dataset.len_landscape)*100,3)}%')
+    logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
-    elif task == 'segmentation':
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_train256light')
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_val256light')
-        logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
+    if sampled:
+        dir_data = 'sampled_4096'#+str(number_of_points)
+    else:
+        dir_data = 'data_no_ground'
 
-        # path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:53EFS0.999.pth.csv'
-        # path = '/home/m.caros/work/objectDetection/pointNet/results/files-segmentation-best_checkpoint_03-18-11:52sklearn0.999.pth.csv'
-        # df = pd.read_csv(path)
-        # no_towers_files = list(df['file_name'])
-        # logging.info(f'Samples without towers in train set: {len(no_towers_files)*0.8}')
-        train_files= glob.glob(os.path.join(dataset_folder, 'train/towers_2000/*.pkl'))
-        val_files= glob.glob(os.path.join(dataset_folder, 'val/towers_2000/*.pkl'))
-        logging.info(f'Samples with towers in train set: {len(train_files)}')
+    train_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', dir_data),
+                                      task='classification', number_of_points=number_of_points,
+                                      towers_files = tower_files_train,
+                                      landscape_files = bckg_files_train,
+                                      fixed_num_points = True)
+    val_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', dir_data),
+                                    task='classification', number_of_points=number_of_points,
+                                    towers_files=tower_files_val,
+                                    landscape_files=bckg_files_val,
+                                    fixed_num_points=True)
 
-        # train_files = towers_files + no_towers_files[:round(0.8*len(no_towers_files))]
-        # val_files = glob.glob(os.path.join(dataset_folder, 'val/towers_2000/*.pkl')) + \
-        #             no_towers_files[round(0.8*len(no_towers_files)):round(0.9*len(no_towers_files))]
+    logging.info(f'Samples with towers in train: {train_dataset.len_towers}')
+    logging.info(f'Samples without towers in train: {train_dataset.len_landscape}')
+    logging.info(f'Proportion towers/landscape: {round((train_dataset.len_towers/train_dataset.len_landscape)*100,3)}%')
 
-        train_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'train/towers_2000'), task=task,
-                                          number_of_points=number_of_points,
-                                          files_segmentation=train_files)
-
-        val_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'val/towers_2000'), task=task,
-                                        number_of_points=number_of_points,
-                                        files_segmentation=val_files)
+    logging.info(f'Samples with towers in val: {val_dataset.len_towers}')
+    logging.info(f'Samples without towers in val: {val_dataset.len_landscape}')
+    logging.info(f'Proportion towers/landscape: {round((val_dataset.len_towers/val_dataset.len_landscape)*100,3)}%')
 
     logging.info(f'Samples for training: {len(train_dataset)}')
     logging.info(f'Samples for validation: {len(val_dataset)}')
@@ -109,15 +118,15 @@ def train(dataset,
                                                   num_workers=number_of_workers,
                                                   drop_last=True)
 
-    if task == 'classification':
-        model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
-                                       point_dimension=train_dataset.POINT_DIMENSION,
-                                       dataset=train_dataset)
-    elif task == 'segmentation':
-        model = SegmentationPointNet(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
-                                     point_dimension=train_dataset.POINT_DIMENSION)
+    if RGBN:
+        model = ClassificationPointNet_IGBVI(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
+                                         point_dimension=train_dataset.POINT_DIMENSION,
+                                         dataset=train_dataset)
     else:
-        raise Exception('Unknown task !')
+        model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
+                                             point_dimension=train_dataset.POINT_DIMENSION,
+                                             dataset=train_dataset)
+
 
     if torch.cuda.is_available():
         logging.info(f"cuda available")
@@ -128,8 +137,17 @@ def train(dataset,
         device = 'cpu'
 
     # print model and parameters
-    INPUT_SHAPE = (7, 2000)
-    summary(model, INPUT_SHAPE)
+    # INPUT_SHAPE = (3, 2000)
+    # summary(model, INPUT_SHAPE)
+    table = PrettyTable(["Modules", "Parameters"])
+    total_params = 0
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad: continue
+        params = parameter.numel()
+        table.add_row([name, params])
+        total_params += params
+    # print(table)
+    logging.info(f"Total Trainable Params: {total_params}")
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -138,9 +156,6 @@ def train(dataset,
         checkpoint = torch.load(model_checkpoint)
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-
-    if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
 
     train_loss = []
     test_loss = []
@@ -166,33 +181,29 @@ def train(dataset,
         batch_number = 0
 
         if epochs_since_improvement == 10:
-            adjust_learning_rate(optimizer)
-
+            adjust_learning_rate(optimizer, 0.5)
+        elif epoch == 10:
+            adjust_learning_rate(optimizer, 0.5)
         # --------------------------------------------- train loop ---------------------------------------------
         for data in train_dataloader:
 
             batch_number += 1
             points, targets, file_name = data  # [batch, n_samples, dims] [batch, n_samples]
 
-            if task == 'classification':
-                # get weights for imbalanced loss
-                c_weights, sample_weights = \
-                    get_weights_transformed_for_sample(weighing_method,
-                                                       n_classes=2,
-                                                       samples_per_cls=[train_dataset.len_landscape, train_dataset.len_towers],
-                                                       beta=BETA,
-                                                       labels=targets)
-                c_weights = c_weights.to(device)
+            # get weights for imbalanced loss
+            c_weights, sample_weights = \
+                get_weights_transformed_for_sample(weighing_method,
+                                                   n_classes=2,
+                                                   samples_per_cls=[train_dataset.len_landscape + val_dataset.len_landscape, train_dataset.len_towers + val_dataset.len_towers],
+                                                   beta=beta,
+                                                   labels=targets)
+            c_weights = c_weights.to(device)
             if torch.cuda.is_available():
                 points, targets = points.cuda(), targets.cuda()
 
             optimizer.zero_grad()
             model = model.train()
             preds, feature_transform = model(points)
-
-            if task == 'segmentation':
-                preds = preds.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)
-                targets = targets.view(-1)
 
             identity = torch.eye(feature_transform.shape[-1])
             identity = identity.to(device)
@@ -207,13 +218,11 @@ def train(dataset,
             optimizer.step()
             preds = preds.data.max(1)[1]
             corrects = preds.eq(targets.data).cpu().sum()
-            if task == 'classification':
-                accuracy = corrects.item() / float(batch_size)
-                accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
-                epoch_train_acc_w.append(accuracy_w)
+            # accuracy for tensorboard
+            accuracy = corrects.item() / float(batch_size)
+            accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
+            epoch_train_acc_w.append(accuracy_w)
 
-            elif task == 'segmentation':
-                accuracy = corrects.item() / float(batch_size * number_of_points)
             epoch_train_acc.append(accuracy)
             # print(f'train loss: {np.mean(epoch_train_loss)}, train accuracy: {np.mean(epoch_train_acc)}')
 
@@ -227,19 +236,14 @@ def train(dataset,
         for batch_number, data in enumerate(val_dataloader):
             points, targets, file_name = data
 
-            if task == 'classification':
-                c_weights, sample_weights = \
-                    get_weights_transformed_for_sample(weighing_method, 2, [train_dataset.len_landscape, train_dataset.len_towers], beta=BETA, labels=targets)
-                c_weights = c_weights.to(device)
+            c_weights, sample_weights = \
+                get_weights_transformed_for_sample(weighing_method, 2, [train_dataset.len_landscape, train_dataset.len_towers], beta=beta, labels=targets)
+            c_weights = c_weights.to(device)
 
             if torch.cuda.is_available():
                 points, targets = points.cuda(), targets.cuda()
             model = model.eval()
             preds, feature_transform = model(points)   # [batch, n_points, 2]
-
-            if task == 'segmentation':
-                preds = preds.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)   # [batch * n_points, 2]
-                targets = targets.view(-1)  # [batch * n_points]
 
             loss = F.nll_loss(preds, targets, weight=c_weights)
             epoch_val_loss.append(loss.cpu().item())
@@ -251,13 +255,9 @@ def train(dataset,
             detected_positive.append((np.array(preds.cpu()) == np.ones(len(preds))).sum())  # boolean with positions of 1s
             detected_negative.append((np.array(preds.cpu()) == np.zeros(len(preds))).sum()) # boolean with positions of 0s
 
-            if task == 'classification':
-                accuracy = corrects.item() / float(batch_size)
-                accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
-                epoch_val_acc_w.append(accuracy_w)
-
-            elif task == 'segmentation':
-                accuracy = corrects.item() / float(batch_size * number_of_points)
+            accuracy = corrects.item() / float(batch_size)
+            accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
+            epoch_val_acc_w.append(accuracy_w)
 
             epoch_val_acc.append(accuracy)
         # ------------------------------------------------------------------------------------------------------
@@ -281,14 +281,11 @@ def train(dataset,
 
         # print(f'Epoch {epoch}: train loss: {np.mean(epoch_train_loss)}, val loss: {np.mean(epoch_val_loss)},'
         #       f'train accuracy: {np.mean(epoch_train_acc)},  val accuracy: {np.mean(epoch_val_acc)}')
-        # print(f'Weights: {c_weights}')
+        print(f'Weights: {c_weights}')
 
         if np.mean(epoch_val_loss) < best_vloss:
             # Save checkpoint
-            if task == 'classification':
-                name = now.strftime("%m-%d-%H:%M") + str(BETA)
-            elif task == 'segmentation':
-                name = now.strftime("%m-%d-%H:%M") + '_seg'
+            name = now.strftime("%m-%d-%H:%M") + str(beta)
             save_checkpoint(name, epoch, epochs_since_improvement, model, optimizer, accuracy, batch_size,
                             learning_rate, number_of_points, weighing_method)
             epochs_since_improvement = 0
@@ -310,6 +307,7 @@ def train(dataset,
 
     # plot_losses(train_loss, test_loss, save_to_file=os.path.join(output_folder, 'loss_plot.png'))
     # plot_accuracies(train_acc, test_acc, save_to_file=os.path.join(output_folder, 'accuracy_plot.png'))
+    print(f'Weights: {c_weights}')
     print("--- TOTAL TIME: %s min ---" % (round((time.time() - start_time) / 60, 3)))
 
 
@@ -328,7 +326,7 @@ def save_checkpoint(name, epoch, epochs_since_improvement, model, optimizer, acc
     }
     filename = 'checkpoint_' + name + '.pth'
 
-    torch.save(state, 'checkpoints/' + filename)
+    torch.save(state, 'pointNet/checkpoints/' + filename)
 
 
 def adjust_learning_rate(optimizer, shrink_factor=0.5):
@@ -347,17 +345,17 @@ def adjust_learning_rate(optimizer, shrink_factor=0.5):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('dataset', default='lidar', type=str, choices=['lidar', 'shapenet', 'mnist'], help='dataset to train on')
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
-    parser.add_argument('task', type=str, choices=['classification', 'segmentation'], help='type of task')
-    parser.add_argument('output_folder', type=str, help='output folder')
-    parser.add_argument('--number_of_points', type=int, default=2000, help='number of points per cloud')
+    parser.add_argument('--output_folder', type=str, default=None, help='output folder')
+    parser.add_argument('--number_of_points', type=int, default=2048, help='number of points per cloud')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
     parser.add_argument('--epochs', type=int, default=200, help='number of epochs')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--weighing_method', type=str, default='ISNS', help='sample weighing method: ISNS or INS or EFS')
-    parser.add_argument('--number_of_workers', type=int, default=1, help='number of workers for the dataloader')
+    parser.add_argument('--weighing_method', type=str, default='EFS', help='sample weighing method: ISNS or INS or EFS')
+    parser.add_argument('--number_of_workers', type=int, default=4, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
+    parser.add_argument('--beta', type=float, default=0.999, help='beta for weights')
+    parser.add_argument('--sample', type=bool, default=True, help='use smart sampled data')
 
     args = parser.parse_args()
 
@@ -366,9 +364,7 @@ if __name__ == '__main__':
                         datefmt='%Y-%m-%d %H:%M:%S')
     sys.path.insert(0, '/home/m.caros/work/objectDetection/pointNet')
 
-    train(args.dataset,
-          args.dataset_folder,
-          args.task,
+    train(args.dataset_folder,
           args.number_of_points,
           args.batch_size,
           args.epochs,
@@ -376,4 +372,7 @@ if __name__ == '__main__':
           args.weighing_method,
           args.output_folder,
           args.number_of_workers,
-          args.model_checkpoint)
+          args.model_checkpoint,
+          args.beta,
+          args.sample)
+
