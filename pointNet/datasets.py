@@ -17,30 +17,30 @@ class LidarDataset(data.Dataset):
                  towers_files=None,
                  landscape_files=None,
                  fixed_num_points=True):
-        self.dataset_folder = dataset_folder  # /dades/LIDAR/towers_detection/datasets/
+        self.dataset_folder = dataset_folder + '/'  # /dades/LIDAR/towers_detection/datasets/
         self.number_of_points = number_of_points
         self.task = task
         self.tower_files = towers_files
         self.landscape_files = landscape_files
         self.fixed_num_points = fixed_num_points
 
-        # category_file = '/dades/LIDAR/towers_detection/datasets/dataFolders.txt'
-        # self.folders_to_classes_mapping = {}
-        # with open(category_file, 'r') as fid:
-        #     reader = csv.reader(fid, delimiter='\t')
-        #     for k, row in enumerate(reader):
-        #         self.folders_to_classes_mapping[row[0]] = k
+        self.classes_mapping = {}
+        for file in self.landscape_files:
+            self.classes_mapping[file] = 0
+        for file in self.tower_files:
+            self.classes_mapping[file] = 1
 
         if task == 'classification':
             self.len_towers = len(self.tower_files)
             self.len_landscape = len(self.landscape_files)
-            self.paths_files = self.tower_files + self.landscape_files
-            self.files = [(f.split('/')[-2], f.split('/')[-1]) for f in self.paths_files]
+            self.paths_towers = [self.dataset_folder +  f for f in self.tower_files]
+            self.paths_landscape = [self.dataset_folder  + f for f in self.landscape_files]
+            self.paths_files = self.paths_towers + self.paths_landscape
+            self.files = self.tower_files + self.landscape_files
 
         elif task == 'segmentation':
-            self.paths_towers = [dataset_folder + '/pc_towers_40x40/data_no_ground/' + f for f in self.tower_files]
-            self.paths_landscape = [dataset_folder + '/pc_no_towers_40x40/data_no_ground/' + f for f in
-                                    self.landscape_files]
+            self.paths_towers = [self.dataset_folder +  f for f in self.tower_files]
+            self.paths_landscape = [self.dataset_folder  + f for f in self.landscape_files]
             self.paths_files = self.paths_towers + self.paths_landscape
 
     def __len__(self):
@@ -49,8 +49,7 @@ class LidarDataset(data.Dataset):
     def __getitem__(self, index):
         point_cloud_class = None
         if self.task == 'classification':
-            folder, file = self.paths_files[index]
-            point_cloud_class = self.folders_to_classes_mapping[folder]  # needed for classification
+            point_cloud_class = self.classes_mapping[self.files[index]]  # needed for classification
             # 0 -> no tower
             # 1 -> tower
         return self.prepare_data(self.paths_files[index],
@@ -67,13 +66,25 @@ class LidarDataset(data.Dataset):
                      task='classification'):
 
         with open(point_file, 'rb') as f:
-            pc = pickle.load(f).astype(np.float32)  # [2000, 12]
+            pc = pickle.load(f).astype(np.float32)  # [2048, 10]
+        # get points labeled for sampling
+        # if fixed_num_points:
+        #     pc = pc[pc[:,-1]==1] # todo add this line when processing is changed
+
+        # sample points if needed
         if fixed_num_points and pc.shape[0] > number_of_points:
             sampling_indices = np.random.choice(pc.shape[0], number_of_points)
             pc = pc[sampling_indices, :]
 
+        # duplicate points if needed
+        elif fixed_num_points and pc.shape[0] < number_of_points:
+            points_needed = number_of_points - pc.shape[0]
+            rdm_list = np.random.randint(0, pc.shape[0], points_needed)
+            extra_points = pc[rdm_list, :]
+            pc = np.concatenate([pc, extra_points], axis=0)
+
         if task == 'segmentation':
-            segment_labels = pc[:, 3].astype(np.int)  # [2000,1]
+            segment_labels = pc[:, 3].astype(np.int)  # [2048,1]
             segment_labels[segment_labels != 15] = 0
             segment_labels[segment_labels == 15] = 1
             labels = segment_labels
