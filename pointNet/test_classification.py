@@ -5,9 +5,9 @@ import time
 from progressbar import progressbar
 from torch.utils.data import random_split
 from datasets import LidarDataset
-# from model.light_pointnet import ClassificationPointNet
-# from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI
-from model.pointnet import *
+from model.light_pointnet import ClassificationPointNet
+from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI
+# from model.pointnet import *
 
 import logging
 from utils import *
@@ -43,14 +43,14 @@ def test(dataset_folder,
         with open('pointNet/data/test_landscape_files.txt', 'r') as f:
             landscape_files = f.read().splitlines()
 
-    path_dataset = os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_2048')
+    path_dataset = os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_4096')
     logging.info(f'Dataset path: {path_dataset}')
 
     test_dataset = LidarDataset(dataset_folder=path_dataset,
                                           task=task, number_of_points=number_of_points,
                                           towers_files = tower_files,
                                           landscape_files = landscape_files,
-                                          fixed_num_points = True)
+                                          fixed_num_points = False)
 
     logging.info(f'Samples for validation: {len(test_dataset)}')
     logging.info(f'Samples with towers in TEST: {test_dataset.len_towers}')
@@ -63,7 +63,7 @@ def test(dataset_folder,
                                                   num_workers=number_of_workers,
                                                   drop_last=False)
     if RGBN:
-        model = ClassificationPointNet(num_classes=test_dataset.NUM_CLASSIFICATION_CLASSES,
+        model = ClassificationPointNet_IGBVI(num_classes=test_dataset.NUM_CLASSIFICATION_CLASSES,
                                        point_dimension=test_dataset.POINT_DIMENSION,
                                        dataset=test_dataset)
     else:
