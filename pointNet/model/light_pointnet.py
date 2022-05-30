@@ -54,7 +54,7 @@ class BasePointNet(nn.Module):
         self.feature_transform = TransformationNet(input_dim=64, output_dim=64)
 
         # self.conv_1 = nn.Conv1d(point_dimension, 64, 1)
-        self.conv_1 = nn.Conv1d(4, 64, 1) 
+        self.conv_1 = nn.Conv1d(4, 64, 1)
         self.conv_2 = nn.Conv1d(64, 64, 1)
         self.conv_3 = nn.Conv1d(64, 64, 1)
         self.conv_4 = nn.Conv1d(64, 128, 1)
