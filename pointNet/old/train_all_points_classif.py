@@ -1,6 +1,4 @@
 import argparse
-import random
-
 import torch.optim as optim
 import torch.nn.functional as F
 import time
@@ -8,20 +6,20 @@ from progressbar import progressbar
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
 from datasets import LidarDataset
-from model.pointnetRNN import ClassificationPointNet, SegmentationPointNet, RNNSegmentationPointNet
+from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI, SegmentationPointNet_IGBVI
 import logging
 import datetime
 from sklearn.metrics import balanced_accuracy_score
 import warnings
 from utils import *
-from torchsummary import summary
 import glob
+from prettytable import PrettyTable
 
 warnings.filterwarnings('ignore')
 
 MODELS = {
-    'classification': ClassificationPointNet,
-    'segmentation': SegmentationPointNet
+    'classification': ClassificationPointNet_IGBVI,
+    'segmentation': SegmentationPointNet_IGBVI
 }
 
 DATASETS = {
@@ -51,7 +49,7 @@ def train(dataset,
     start_time = time.time()
     logging.info(f"Dataset: {dataset}")
     logging.info(f"Weighing method: {weighing_method}")
-    BETA = 0.9
+    BETA = 0.999
 
     # Tensorboard location and plot names
     now = datetime.datetime.now()
@@ -59,14 +57,45 @@ def train(dataset,
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
 
+    RGBN = True
+    if RGBN:
+        with open('../data/RGBN/RGBN_train_moved_towers_files.txt', 'r') as f:
+            tower_files_train = f.read().splitlines()
+        with open('../data/RGBN/RGBN_val_moved_towers_files.txt', 'r') as f:
+            tower_files_val = f.read().splitlines()
+        with open('../data/RGBN/RGBN_train_landscape_files.txt', 'r') as f:
+            bckg_files_train = f.read().splitlines()
+        with open('../data/RGBN/RGBN_val_landscape_files.txt', 'r') as f:
+            bckg_files_val = f.read().splitlines()
+    else:
+        with open('../data/val_moved_towers_files.txt', 'r') as f:
+            tower_files_val = f.read().splitlines()
+        with open('../data/train_moved_towers_files.txt', 'r') as f:
+            tower_files_train = f.read().splitlines()
+        with open('../data/train_landscape_files.txt', 'r') as f:
+            bckg_files_train = f.read().splitlines()
+        with open('../data/val_landscape_files.txt', 'r') as f:
+            bckg_files_val = f.read().splitlines()
+
+
     # Datasets train / val / test
     if task == 'classification':
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_train' + 'B' + str(BETA))
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_val' + 'B' + str(BETA))
+        custom_collate_fn = collate_classif_padd
+
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_train'  + str(BETA))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IGBVI_val' + str(BETA))
         logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
-        train_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'train'), task=task, number_of_points=n_points)
-        val_dataset = DATASETS[dataset](os.path.join(dataset_folder, 'val'), task=task, number_of_points=n_points)
+        train_dataset = DATASETS[dataset](dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'data_no_ground'),
+                                          task=task, number_of_points=n_points,
+                                          towers_files=tower_files_train,
+                                          landscape_files=bckg_files_train,
+                                          fixed_num_points=True)
+        val_dataset = DATASETS[dataset](dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'data_no_ground'),
+                                        task=task, number_of_points=n_points,
+                                        towers_files=tower_files_val,
+                                        landscape_files=bckg_files_val,
+                                        fixed_num_points=True)
 
         logging.info(f'Samples with towers in train: {train_dataset.len_towers}')
         logging.info(f'Samples without towers in train: {train_dataset.len_landscape}')
@@ -77,46 +106,11 @@ def train(dataset,
         logging.info(
             f'Proportion towers/landscape: {round((val_dataset.len_towers / val_dataset.len_landscape) * 100, 3)}%')
 
-    elif task == 'segmentation':
-        if use_rnn:
-            writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_train_gru1L')
-            writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_val_gru1L')
-        else:
-            writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_train_reg')
-            writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg' + '_val_reg')
-        logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
-
-        with open('pointNet/data/towers_files.txt', 'r') as f:
-            tower_files = f.read().splitlines()
-        with open('pointNet/data/landscape_files.txt', 'r') as f:
-            landscape_files = f.read().splitlines()
-
-        logging.info(f'Samples with towers: {len(tower_files)}')
-        n_lanscape = int(len(landscape_files) * 0.001)
-        logging.info(f'Samples with landscape for segmentation: {n_lanscape}')
-
-        # split train (80%) / val (10%) / test (10%)
-        t_train = round(len(tower_files) * 0.8)
-        l_train = round(n_lanscape * 0.8)
-        t_val = round(len(tower_files) * 0.9)
-        l_val = round(n_lanscape * 0.9)
-
-        train_dataset = DATASETS[dataset](dataset_folder,
-                                          task=task,
-                                          number_of_points=n_points,
-                                          towers_files=tower_files[:t_train],
-                                          landscape_files=landscape_files[:l_train],
-                                          fixed_num_points=False)
-        val_dataset = DATASETS[dataset](dataset_folder,
-                                        task=task,
-                                        number_of_points=n_points,
-                                        towers_files=tower_files[t_train:t_val],
-                                        landscape_files=landscape_files[l_train: l_val],
-                                        fixed_num_points=False)
 
     logging.info(f'Samples for training: {len(train_dataset)}')
     logging.info(f'Samples for validation: {len(val_dataset)}')
     logging.info(f'Task: {train_dataset.task}')
+
 
     # Datalaoders
     train_dataloader = torch.utils.data.DataLoader(train_dataset,
@@ -124,29 +118,44 @@ def train(dataset,
                                                    shuffle=True,
                                                    num_workers=number_of_workers,
                                                    drop_last=True,
-                                                   collate_fn=collate_fn_padd)
+                                                   collate_fn=custom_collate_fn)
     val_dataloader = torch.utils.data.DataLoader(val_dataset,
                                                  batch_size=batch_size,
                                                  shuffle=True,
                                                  num_workers=number_of_workers,
                                                  drop_last=True,
-                                                 collate_fn=collate_fn_padd)
+                                                 collate_fn=custom_collate_fn)
 
     if task == 'segmentation':
         if use_rnn:
-            model = RNNSegmentationPointNet(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
-                                            hidden_size=256,
-                                            point_dimension=train_dataset.POINT_DIMENSION)
+            print()
+            # model = RNNSegmentationPointNet_I(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
+            #                                 hidden_size=256,
+            #                                 point_dimension=train_dataset.POINT_DIMENSION)
         else:
-            model = SegmentationPointNet(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
+            model = SegmentationPointNet_IGBVI(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
                                             point_dimension=train_dataset.POINT_DIMENSION)
+    elif task == 'classification':
+        model = ClassificationPointNet_IGBVI(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
+                                       point_dimension=train_dataset.POINT_DIMENSION,
+                                       dataset=train_dataset)
     else:
         raise Exception('Unknown task !')
 
     model.to(device)
+
     # print model and parameters
-    # INPUT_SHAPE = (7, 2000)
-    # summary(model, INPUT_SHAPE)
+    table = PrettyTable(["Modules", "Parameters"])
+    total_params = 0
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad: continue
+        params = parameter.numel()
+        table.add_row([name, params])
+        total_params += params
+    # print(table)
+    logging.info(f"Total Trainable Params: {total_params}")
+
+
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     if model_checkpoint:
@@ -164,104 +173,99 @@ def train(dataset,
     test_acc = []
     best_vloss = 1_000_000.
     epochs_since_improvement = 0
-    c_weights = None
-    sample_weights = None
 
+    # training loop
     for epoch in progressbar(range(epochs), redirect_stdout=True):
         epoch_train_loss = []
         regu_train_loss = []
         epoch_train_acc = []
         epoch_train_acc_w = []
-        shape_preds = 0
+        seen_points = 0
 
         if epochs_since_improvement == 10:
             adjust_learning_rate(optimizer, 0.5)
         elif epoch == 10:
-            adjust_learning_rate(optimizer, 0.1)
+            adjust_learning_rate(optimizer, 0.5)
 
         # --------------------------------------------- train loop ---------------------------------------------
         for data in train_dataloader:
-            # batch_number += 1
-            points, targets, filenames = data  # [7557, 4, 12]
-            if points.shape[0] > 45000:
-                print('points in point cloud: ', points.shape[0])
+            points, targets, filenames = data  # [7557, batch, dims], [4]
 
-            points = points.view(batch_size, -1, 12)  # [batch, n_samples, dims]
-            targets = targets.view(batch_size, -1)  # [batch, n_samples]
-
-            points, targets = points.to(device), targets.to(device)
+            points = points.view(batch_size, -1, 10)  # [batch, n_samples, dims]
+            targets = targets.view(batch_size, -1).to(device)  # [batch, n_samples]
             pc_pred = torch.Tensor().to(device)
 
             # Pytorch accumulates gradients. We need to clear them out before each instance
             optimizer.zero_grad()
             model = model.train()
+
             if use_rnn:
                 hidden = model.initHidden(points)
+
             j = 0
-            while shape_preds < points.shape[1]:
+            while seen_points < points.shape[1]:
                 end_batch = n_points * (j + 1)
                 if end_batch < points.shape[1]:
                     in_points = points[:, j * n_points: end_batch, :]
                 else:
                     points_needed = end_batch - points.shape[1]
-                    rdm_list = np.random.randint(0, points.shape[1], points_needed)
-                    in_points = points[:, j * n_points:, :]
-                    extra_points = points[:, rdm_list, :]
-                    in_points = torch.cat([in_points, extra_points], dim=1)
-                    # add duplicated targets
-                    extra_targets = targets[:, rdm_list]
+                    if points_needed == 2048 and points.shape[1] == 2048:
+                        in_points = points
+                        extra_points = points
+                        extra_targets = targets
+                    else:
+                        rdm_list = np.random.randint(0, points.shape[1], points_needed)
+                        in_points = points[:, j * n_points:, :]
+                        extra_points = points[:, rdm_list, :]
+                        extra_targets = targets[:, rdm_list]
+
                     targets = torch.cat((targets, extra_targets), dim=1)
+                    in_points = torch.cat([in_points, extra_points], dim=1)
+
                 # forward pass
                 if use_rnn:
-                    preds, hidden, feature_transform = model(in_points, hidden)  # [b, n_points, 2] [2, b, 128] [b,64,64]
+                    preds, hidden, feature_transform = model(in_points.to(device), hidden)  # [b, n_points, 2] [2, b, 128] [b,64,64]
                 else:
-                    preds, feature_transform = model(in_points)
-                pc_pred = torch.cat((pc_pred, preds), dim=1)
-                shape_preds = pc_pred.shape[1]
-                j += 1
-                # mean_feature_transform += feature_transform
-
-            # mean_feature_transform = mean_feature_transform/j
-            # feature_transform = mean_feature_transform
-            # mean_feature_transform=[]
-            shape_preds = 0
-            if task == 'segmentation':
-                pc_pred = pc_pred.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)
+                    preds, feature_transform = model(in_points.to(device))  # classification: [batch, 2], [batch, 64, 64]
+                    preds = preds.unsqueeze(2)  # classification: [batch, 2, 1]
+                    pc_pred = preds.view(-1, 2)
                 targets = targets.view(-1)
 
-            # get weights for imbalanced loss
-            # points_tower = (np.array(targets.cpu()) == np.ones(len(targets))).sum()
-            # points_landscape = (np.array(targets.cpu()) == np.zeros(len(targets))).sum()
+                c_weights, sample_weights = \
+                    get_weights_transformed_for_sample(weighing_method,
+                                                       n_classes=2,
+                                                       samples_per_cls=[train_dataset.len_landscape + val_dataset.len_landscape, train_dataset.len_towers + val_dataset.len_towers],
+                                                       beta=BETA,
+                                                       labels=targets)
+                c_weights = c_weights.to(device)
 
-            # c_weights, sample_weights = \
-            #     get_weights_transformed_for_sample(weighing_method,
-            #                                        n_classes=2,
-            #                                        samples_per_cls=[points_landscape, points_tower],
-            #                                        beta=BETA,
-            #                                        labels=targets)
-            # c_weights = c_weights.to(device)
+                identity = torch.eye(feature_transform.shape[-1])
+                identity = identity.to(device)
+                regularization_loss = torch.norm(
+                    identity - torch.bmm(feature_transform, feature_transform.transpose(2, 1)))
+                regu_train_loss.append(regularization_loss.cpu().item())
 
-            identity = torch.eye(feature_transform.shape[-1])
-            identity = identity.to(device)
-            regularization_loss = torch.norm(identity - torch.bmm(feature_transform, feature_transform.transpose(2, 1)))
-            regu_train_loss.append(regularization_loss.cpu().item())
+                loss = F.nll_loss(pc_pred, targets, weight=c_weights) + 0.001 * regularization_loss
+                epoch_train_loss.append(loss.cpu().item())
 
-            loss = F.nll_loss(pc_pred, targets) + 0.001 * regularization_loss
-            epoch_train_loss.append(loss.cpu().item())
+                loss.backward()
+                optimizer.step()
 
-            loss.backward()
-            optimizer.step()
+                pc_pred = pc_pred.data.max(1)[1]
+                corrects = pc_pred.eq(targets.data).cpu().sum()
+                if task == 'classification':
+                    accuracy = corrects.item() / float(batch_size)
+                    accuracy_w = balanced_accuracy_score(targets.cpu(), pc_pred.cpu(), sample_weight=sample_weights)
+                    epoch_train_acc_w.append(accuracy_w)
 
-            pc_pred = pc_pred.data.max(1)[1]
-            corrects = pc_pred.eq(targets.data).cpu().sum()
-            if task == 'classification':
-                accuracy = corrects.item() / float(batch_size)
-                accuracy_w = balanced_accuracy_score(targets.cpu(), pc_pred.cpu(), sample_weight=sample_weights)
-                epoch_train_acc_w.append(accuracy_w)
+                elif task == 'segmentation':
+                    accuracy = corrects.item() / float(targets.shape[0])
+                epoch_train_acc.append(accuracy)
 
-            elif task == 'segmentation':
-                accuracy = corrects.item() / float(targets.shape[0])
-            epoch_train_acc.append(accuracy)
+                seen_points += in_points.shape[1]
+                j += 1
+
+            seen_points = 0
 
         # --------------------------------------------- val loop ---------------------------------------------
         epoch_val_loss = []
@@ -275,15 +279,10 @@ def train(dataset,
         with torch.no_grad():
             for data in val_dataloader:
                 points, targets, filenames = data  # [7557, 4, 12]
-                if points.shape[0] > 45000:
-                    print('points in point cloud: ', points.shape[0])
-
-                points = points.view(batch_size, -1, 12)  # [batch, n_samples, dims]
+                points = points.view(batch_size, -1, 10)  # [batch, n_samples, dims]
                 targets = targets.view(batch_size, -1)  # [batch, n_samples]
 
-                points, targets = points.to(device), targets.to(device)
-                pc_pred = torch.Tensor()
-                pc_pred = pc_pred.to(device)
+                targets = targets.to(device)
 
                 optimizer.zero_grad()
                 model = model.eval()
@@ -291,66 +290,71 @@ def train(dataset,
                 if use_rnn:
                     hidden = model.initHidden(points)
                 j = 0
-                while shape_preds < points.shape[1]:
+                seen_points = 0
+                while seen_points < points.shape[1]:
                     end_batch = n_points * (j + 1)
                     if end_batch < points.shape[1]:
                         in_points = points[:, j * n_points: end_batch, :]
                     else:
                         points_needed = end_batch - points.shape[1]
-                        rdm_list = np.random.randint(0, points.shape[1], points_needed)
-                        in_points = points[:, j * n_points:, :]
-                        extra_points = points[:, rdm_list, :]
-                        in_points = torch.cat([in_points, extra_points], dim=1)
-                        # add duplicated targets
-                        extra_targets = targets[:, rdm_list]
+                        if points_needed == 2048 and points.shape[1] == 2048:
+                            in_points = points
+                            extra_points = points
+                            extra_targets = targets
+                        else:
+                            rdm_list = np.random.randint(0, points.shape[1], points_needed)
+                            in_points = points[:, j * n_points:, :]
+                            extra_points = points[:, rdm_list, :]
+                            extra_targets = targets[:, rdm_list]
+
                         targets = torch.cat((targets, extra_targets), dim=1)
+                        in_points = torch.cat([in_points, extra_points], dim=1)
 
                     if use_rnn:
-                        preds, hidden, feature_transform = model(in_points, hidden)  # [batch, n_points, 2] [2, batch, 128]
+                        preds, hidden, feature_transform = model(in_points.to(device), hidden)  # [batch, n_points, 2] [2, batch, 128]
                     else:
-                        preds, feature_transform = model(in_points)
-                    pc_pred = torch.cat((pc_pred, preds), dim=1)
-                    shape_preds = pc_pred.shape[1]
+                        preds, feature_transform = model(in_points.to(device))
+
+                    preds = preds.unsqueeze(2)
+                    pc_pred = preds.view(-1, 2)
+                    targets = targets.view(-1)
+
+                    c_weights, sample_weights = \
+                        get_weights_transformed_for_sample(weighing_method,
+                                                           n_classes=2,
+                                                           samples_per_cls=[train_dataset.len_landscape + val_dataset.len_landscape, train_dataset.len_towers + val_dataset.len_towers],
+                                                           beta=BETA,
+                                                           labels=targets)
+                    c_weights = c_weights.to(device)
+
+                    loss = F.nll_loss(pc_pred, targets, weight=c_weights)
+                    epoch_val_loss.append(loss.cpu().item())
+                    pc_pred = pc_pred.data.max(1)[1]
+                    corrects = pc_pred.eq(targets.data).cpu().sum()
+
+                    # sum of targets in batch
+                    targets_pos.append((np.array(targets.cpu()) == np.ones(len(targets))).sum())
+                    targets_neg.append((np.array(targets.cpu()) == np.zeros(len(targets))).sum())
+                    detected_positive.append(
+                        (np.array(pc_pred.cpu()) == np.ones(len(pc_pred))).sum())  # bool with positions of 1s
+                    detected_negative.append(
+                        (np.array(pc_pred.cpu()) == np.zeros(len(pc_pred))).sum())  # bool with positions of 0s
+
+                    if task == 'classification':
+                        accuracy = corrects.item() / float(batch_size)
+                        accuracy_w = balanced_accuracy_score(targets.cpu(), pc_pred.cpu(), sample_weight=sample_weights)
+                        epoch_val_acc_w.append(accuracy_w)
+
+                    elif task == 'segmentation':
+                        accuracy = corrects.item() / float(targets.shape[0])
+
+                    epoch_val_acc.append(accuracy)
+
+                    seen_points += in_points.shape[1]
                     j += 1
 
-                shape_preds = 0
-                if task == 'segmentation':
-                    pc_pred = pc_pred.view(-1, train_dataset.NUM_SEGMENTATION_CLASSES)  # [72000,2] should be
-                    targets = targets.view(-1)  # [72000]
 
-                # get weights for imbalanced loss
-                points_tower = (np.array(targets.cpu()) == np.ones(len(targets))).sum()
-                points_landscape = (np.array(targets.cpu()) == np.zeros(len(targets))).sum()
-                # c_weights, sample_weights = \
-                #     get_weights_transformed_for_sample(weighing_method,
-                #                                        n_classes=2,
-                #                                        samples_per_cls=[points_landscape, points_tower],
-                #                                        beta=BETA,
-                #                                        labels=targets)
-                # c_weights = c_weights.to(device)
 
-                loss = F.nll_loss(pc_pred, targets)
-                epoch_val_loss.append(loss.cpu().item())
-                pc_pred = pc_pred.data.max(1)[1]
-                corrects = pc_pred.eq(targets.data).cpu().sum()
-
-                # sum of targets in batch
-                targets_pos.append((np.array(targets.cpu()) == np.ones(len(targets))).sum())
-                targets_neg.append((np.array(targets.cpu()) == np.zeros(len(targets))).sum())
-                detected_positive.append(
-                    (np.array(pc_pred.cpu()) == np.ones(len(pc_pred))).sum())  # bool with positions of 1s
-                detected_negative.append(
-                    (np.array(pc_pred.cpu()) == np.zeros(len(pc_pred))).sum())  # bool with positions of 0s
-
-                if task == 'classification':
-                    accuracy = corrects.item() / float(batch_size)
-                    accuracy_w = balanced_accuracy_score(targets.cpu(), pc_pred.cpu(), sample_weight=sample_weights)
-                    epoch_val_acc_w.append(accuracy_w)
-
-                elif task == 'segmentation':
-                    accuracy = corrects.item() / float(targets.shape[0])
-
-                epoch_val_acc.append(accuracy)
         # ------------------------------------------------------------------------------------------------------
         # Tensorboard
         writer_train.add_scalar('loss', np.mean(epoch_train_loss), epoch)
@@ -360,8 +364,8 @@ def train(dataset,
         writer_train.add_scalar('mean_detected_negative', np.mean(targets_neg), epoch)
         writer_val.add_scalar('mean_detected_negative', np.mean(detected_negative), epoch)
         writer_train.add_scalar('regularization_loss', np.mean(regu_train_loss), epoch)
-        # writer_train.add_scalar('accuracy_weighted', np.mean(epoch_train_acc_w), epoch)
-        # writer_val.add_scalar('accuracy_weighted', np.mean(epoch_val_acc_w), epoch)
+        writer_train.add_scalar('accuracy_weighted', np.mean(epoch_train_acc_w), epoch)
+        writer_val.add_scalar('accuracy_weighted', np.mean(epoch_val_acc_w), epoch)
         writer_train.add_scalar('accuracy', np.mean(epoch_train_acc), epoch)
         writer_val.add_scalar('accuracy', np.mean(epoch_val_acc), epoch)
         writer_val.add_scalar('epochs_since_improvement', epochs_since_improvement, epoch)
@@ -370,10 +374,10 @@ def train(dataset,
         writer_train.flush()
         writer_val.flush()
 
-        print(f'Epoch {epoch}: train loss: {np.round(np.mean(epoch_train_loss),5)}, '
-              f'val loss: {np.round(np.mean(epoch_val_loss),5)},'
-              f'train accuracy: {np.round(np.mean(epoch_train_acc),5)},  '
-              f'val accuracy: {np.round(np.mean(epoch_val_acc),5)}')
+        # print(f'Epoch {epoch}: train loss: {np.round(np.mean(epoch_train_loss),5)}, '
+        #       f'val loss: {np.round(np.mean(epoch_val_loss),5)},'
+        #       f'train accuracy: {np.round(np.mean(epoch_train_acc),5)},  '
+        #       f'val accuracy: {np.round(np.mean(epoch_val_acc),5)}')
         # print(f'Weights: {c_weights}')
 
         if np.mean(epoch_val_loss) < best_vloss:
@@ -474,3 +478,5 @@ if __name__ == '__main__':
           args.number_of_workers,
           args.model_checkpoint,
           args.use_rnn)
+
+# python pointNet/train_all_points_classif.py lidar /dades/LIDAR/towers_detection/datasets classification pointNet/results/ --batch_size 32 --epochs 100 --learning_rate 0.001 --weighing_method EFS --number_of_points 4096 --number_of_workers 4
