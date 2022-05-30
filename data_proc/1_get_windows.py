@@ -24,35 +24,35 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
 
     # ------------------------------------------------- 1 --------------------------------------------------------
     # Get LAS blocks containing towers
-    # logging.info('----------------- 1 -----------------')
-    # logging.info(f"Get point clouds of class {SEL_CLASS}")
-    # block_points_towers = get_pointCloud_selClass(LAS_PATH, selClass=SEL_CLASS)
+    logging.info('----------------- 1 -----------------')
+    logging.info(f"Get point clouds of class {SEL_CLASS}")
+    block_points_towers = get_pointCloud_selClass(LAS_PATH, selClass=SEL_CLASS)
 
-    # # save dictionary of towers points
-    # with open('dict_points_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
-    #     pickle.dump(block_points_towers, f)
+    # save dictionary of towers points
+    with open('dict_points_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
+        pickle.dump(block_points_towers, f)
 
-    # # Load dictionary
-    # with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
-    #     block_points_towers = pickle.load(f)
-    #
-    # # ----------------------------------------------- 2 ----------------------------------------------------------
-    # # Sliding Window for tower segmentation
-    # logging.info('----------------- 2 -----------------')
-    # dic_pc_towers, dic_center_towers = object_segmentation(block_points_towers,
-    #                                                        min_points=min_p,
-    #                                                        windowSize=[20, 20],
-    #                                                        stepSize_x=10,
-    #                                                        stepSize_y=20,
-    #                                                        show_prints=False)
-    # with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
-    #     pickle.dump(dic_pc_towers, f)
-    # with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
-    #     json.dump(dic_center_towers, f)
+    # Load dictionary
+    with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
+        block_points_towers = pickle.load(f)
+
+    # ----------------------------------------------- 2 ----------------------------------------------------------
+    # Sliding Window for tower segmentation
+    logging.info('----------------- 2 -----------------')
+    dic_pc_towers, dic_center_towers = object_segmentation(block_points_towers,
+                                                           min_points=min_p,
+                                                           windowSize=[20, 20],
+                                                           stepSize_x=10,
+                                                           stepSize_y=20,
+                                                           show_prints=False)
+    with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
+        pickle.dump(dic_pc_towers, f)
+    with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
+        json.dump(dic_center_towers, f)
 
     # Load dictionaries
-    # with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'rb') as f:
-    #     dic_pc_towers = pickle.load(f)
+    with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'rb') as f:
+        dic_pc_towers = pickle.load(f)
     with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'r') as f:
         dic_center_towers = json.load(f)
 
@@ -62,12 +62,12 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
     get_context(dic_center_towers, w_size=[40, 40], path=LAS_PATH, dataset=DATASET_NAME)
 
     # # -------------------------------------------------- 4 -------------------------------------------------------
-    # # Store all points != selClass
-    # logging.info('----------------- 4 -----------------')
-    # get_points_without_object(SEL_CLASS, path=LAS_PATH, center_t=dic_center_towers, dataset=DATASET_NAME)
-    #
-    # print("--- TOTAL TIME: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
-    # # ------------------------------------------------------------------------------------------------------------
+    # Store all points != selClass
+    logging.info('----------------- 4 -----------------')
+    get_points_without_object(SEL_CLASS, path=LAS_PATH, center_t=dic_center_towers, dataset=DATASET_NAME)
+
+    print("--- TOTAL TIME: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
+    # ------------------------------------------------------------------------------------------------------------
 
 
 # def parallel_reading(files_list, selClass, NUM_CPUS):

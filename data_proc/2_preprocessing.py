@@ -324,20 +324,20 @@ if __name__ == '__main__':
             # IMPORTANT !!!!!!!!!
             # execute compute_pdal_bash.sh  # get HeighAboveGround
 
-            # if 'w_towers' in files_path:
-            #     out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
-            # elif 'w_no_towers' in files_path:
-            #     out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
-            #
-            # # ------ Remove ground, noise and outliers and normalize ------
-            # logging.info(f"1. Remove points of ground, noise and outliers and normalize ")
-            # no_ground_path = remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000,
-            #                                             n_points=N_POINTS, raw_data=raw_data, dataset=DATASET)
-            # print("--- Remove ground and noise time: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
-            #
-            # rm_ground_time = time.time()
-            # # no_ground_path = os.path.join(out_path, 'data_no_ground')
-            # print(f'Ground path {no_ground_path}')
+            if 'w_towers' in files_path:
+                out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
+            elif 'w_no_towers' in files_path:
+                out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
+
+            # ------ Remove ground, noise and outliers and normalize ------
+            logging.info(f"1. Remove points of ground, noise and outliers and normalize ")
+            no_ground_path = remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000,
+                                                        n_points=N_POINTS, raw_data=raw_data, dataset=DATASET)
+            print("--- Remove ground and noise time: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
+
+            rm_ground_time = time.time()
+            # no_ground_path = os.path.join(out_path, 'data_no_ground')
+            print(f'Ground path {no_ground_path}')
 
             no_ground_path='/dades/LIDAR/towers_detection/datasets/pc_towers_40x40/data_no_ground'
             # ------ sampling ------
