@@ -12,6 +12,8 @@ The code has been tested with Python 3.7, [Pytorch](https://pytorch.org/) v1.8, 
 
 #### Object Segmentation
 
+### Results
+![plot](./doc/segmen_results.png)
 
 ### License
 Our code is released under MIT License (see LICENSE file for details).
