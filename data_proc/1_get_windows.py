@@ -1,3 +1,5 @@
+import argparse
+
 import laspy
 from utils import *
 import logging
@@ -15,12 +17,11 @@ logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
 
-def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
+def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS, min_p = 20):
 
     global save_path
     start_time = time.time()
     logging.info(f"Dataset: {DATASET_NAME}")
-    min_p = 20
 
     # ------------------------------------------------- 1 --------------------------------------------------------
     # Get LAS blocks containing towers
@@ -28,8 +29,11 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS):
     logging.info(f"Get point clouds of class {SEL_CLASS}")
     block_points_towers = get_pointCloud_selClass(LAS_PATH, selClass=SEL_CLASS)
 
+    if not os.path.exists('./dicts'):
+        os.makedirs('dicts')
+
     # save dictionary of towers points
-    with open('dict_points_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
+    with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
         pickle.dump(block_points_towers, f)
 
     # Load dictionary
@@ -373,24 +377,19 @@ def split_pointCloud(point_cloud, f_name='', dir='w_no_towers_40x40', path='', w
 
 if __name__ == '__main__':
 
-    SEL_CLASS = 15
-    # DATASET_NAME = 'RIBERA'
-    # DATASET_NAME = 'CAT3'
-    # DATASET_NAME = 'BDN'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output_folder', type=str, default='datasets', help='output folder')
+    parser.add_argument('--min_p', type=int, default=20, help='minimum number of points in object')
+    parser.add_argument('--sel_class', type=int, default=15, help='selected class')
+    parser.add_argument('--dataset_name', type=str, default='CAT3', help='name of dataset')
+    parser.add_argument('--LAS_files_path', type=str)
 
-    DATASETS = ['RIBERA', 'BDN']
+    args = parser.parse_args()
 
-    for DATASET_NAME in DATASETS:
+    SEL_CLASS = args.sel_class # 15 corresponds to our target class (power transmission tower)
+    DATASET_NAME = args.dataset_name
+    LAS_files_path = args.LAS_files_path
 
-        # paths
-        if DATASET_NAME == 'BDN':
-            LAS_files_path = '/mnt/Lidar_K/PROJECTES/0025310000_VOLTA_MachineLearning_Badalona_FBK_5anys/Lliurament_211203_Mariona/LASCLAS_AMB_FOREST-URBAN/FOREST'
-        elif DATASET_NAME == 'CAT3':
-            LAS_files_path = '/mnt/Lidar_M/DEMO_Productes_LIDARCAT3/LAS_Filtrat_Offset4m_Z'
-        elif DATASET_NAME == 'RIBERA':
-            LAS_files_path = '/mnt/Lidar_O/DeepLIDAR/VolVegetacioRibera_ClassTorres-Linies/LAS'
-
-        save_path = '/home/m.caros/work/objectDetection/datasets/'+DATASET_NAME
-
-        split_dataset_windows(DATASET_NAME, LAS_files_path, SEL_CLASS)
+    save_path = os.path.join(args.output_folder,DATASET_NAME)
+    split_dataset_windows(DATASET_NAME, LAS_files_path, SEL_CLASS, args.min_p)
 
