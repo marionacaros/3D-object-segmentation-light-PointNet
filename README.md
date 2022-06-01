@@ -1,4 +1,4 @@
-# 3D-object-segmentation
-3D classification and object segmentation on LiDAR data with Deep Learning
+# Object Segmentation of Cluttered Airborne LiDAR Point Clouds
+3D segmentation on LiDAR data with Deep Learning
 
 ![plot](./doc/framework.png)
