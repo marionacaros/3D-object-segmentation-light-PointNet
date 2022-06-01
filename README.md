@@ -16,10 +16,11 @@ Execute the following commands from the main directory.
 ### Preprocessing
 ![plot](./doc/processing.png)
 
+First, execute:
 ```
 python data_proc/1_get_windows.py --LAS_files_path path/LAS_files/here --sel_class $selected_class --min_p 20
 ```
-This function splits our dataset into windows of a fixed size with and without our target object <br />
+This function splits our dataset into windows of a fixed size with and without our target object. <br />
 First x,y,z of points labeled as our target object are obtained. <br />
 Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded. <br />
 Finally, two versions of the same coordinates are stored. A first one with a tower and a second one with without tower. <br />
