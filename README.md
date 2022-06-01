@@ -4,8 +4,8 @@
 ![plot](./doc/framework.png)
 
 ## Installation
-The code has been tested with Python 3.7, [Pytorch](https://pytorch.org/) v1.8, CUDA 11.6  on Ubuntu 20.04. \n
-You may also need to install pdal library to transform HAS data into HAG.
+The code has been tested with Python 3.7, [Pytorch](https://pytorch.org/) v1.8, CUDA 11.6  on Ubuntu 20.04. <br />
+You may also need to install pdal library to transform HAS data into HAG.<br />
 ```
 pip install pdal
 ```
@@ -19,11 +19,10 @@ Execute the following commands from the main directory.
 ```
 python data_proc/1_get_windows.py --LAS_files_path path/LAS_files/here --sel_class $selected_class --min_p 20
 ```
-This function splits our dataset into windows of a fixed size with and without our target object
-First x,y,z of points labeled as our target object ```sel_class``` are obtained. \n
-Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded.
-Finally, two versions of the same coordinates are stored. A first one with a tower and a second one with without tower.
-
+This function splits our dataset into windows of a fixed size with and without our target object <br />
+First x,y,z of points labeled as our target object ```sel_class``` are obtained. <br />
+Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded. <br />
+Finally, two versions of the same coordinates are stored. A first one with a tower and a second one with without tower. <br />
 
 ```
 bash compute_pdal_bash.sh  # get HeighAboveGround
