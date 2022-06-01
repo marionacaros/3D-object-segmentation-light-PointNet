@@ -5,7 +5,7 @@
 
 ## Installation
 The code has been tested with Python 3.7, [Pytorch](https://pytorch.org/) v1.8, CUDA 11.6  on Ubuntu 20.04. <br />
-You may also need to install pdal library to transform HAS data into HAG.<br />
+You may also need to install ```pdal``` library to transform height above sea (HAS) data into height above ground (HAG).<br />
 ```
 pip install pdal
 ```
