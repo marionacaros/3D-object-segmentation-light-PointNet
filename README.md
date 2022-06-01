@@ -14,13 +14,13 @@ pip install pdal
 Execute the following commands from the main directory.
 
 ### Preprocessing
-![plot](./doc/preprocessing.png)
+![plot](./doc/processing.png)
 
 ```
 python data_proc/1_get_windows.py --LAS_files_path path/LAS_files/here --sel_class $selected_class --min_p 20
 ```
 This function splits our dataset into windows of a fixed size with and without our target object
-First x,y,z of points labeled as our target object (sel_class) are obtained. \n
+First x,y,z of points labeled as our target object ```sel_class``` are obtained. \n
 Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded.
 Finally, two versions of the same coordinates are stored. A first one with a tower and a second one with without tower.
 
