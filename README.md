@@ -10,11 +10,14 @@ You may also need to install ```pdal``` library to transform height above sea (H
 pip install pdal
 ```
 
+## Preprocessing pipeline
+![plot](./doc/processing.png)
+
+
 ## Usage
 Execute the following commands from the main directory.
 
 ### Preprocessing
-![plot](./doc/processing.png)
 
 First, execute:
 ```
