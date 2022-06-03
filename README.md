@@ -29,8 +29,10 @@ Then, objects are segmented and the center of each object is stored, objects wit
 Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one with without tower. <br />
 Point cloud cubes not containing the target object are stored as well.  <br />
 
+Then, use PDAL library to get HAG data:<br />
 ```bash compute_pdal_bash.sh``` or execute the following code for all .LAS files
 ```pdal translate $input_file $output_file hag_nn --writers.las.extra_dims="HeightAboveGround=float32"``` <br />
+
 
 ```
 python data_proc/2_preprocessing.py 
