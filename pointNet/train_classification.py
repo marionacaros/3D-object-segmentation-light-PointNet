@@ -70,16 +70,16 @@ def train(
     logging.info(f'Dataset folder: {dataset_folder}')
 
     if RGBN:
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainRGBN_rdm'  + str(beta))
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalRGBN_rdm'  + str(beta))
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_trainRGBN'  + str(beta))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_valRGBN'  + str(beta))
     else:
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainI'  + str(beta))
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalI'  + str(beta))
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_trainI'  + str(beta))
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_valI'  + str(beta))
 
     logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
     if sampled:
-        dir_data = 'sampled_4096'#+str(number_of_points)
+        dir_data = 'sampled_'+str(number_of_points)
     else:
         dir_data = 'data_no_ground'
 
@@ -165,12 +165,6 @@ def train(
     epochs_since_improvement = 0
     c_weights = None
     sample_weights = None
-
-    #  add graph
-    # point, targets, file_name = next(iter(train_dataloader))
-    # point = point[0,:,:]  # [2000,12]
-    # point = point.unsqueeze(0)
-    # writer_train.add_graph(model, point.cuda())
 
     for epoch in progressbar(range(epochs), redirect_stdout=True):
         epoch_train_loss = []
@@ -355,7 +349,7 @@ if __name__ == '__main__':
     parser.add_argument('--number_of_workers', type=int, default=4, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
     parser.add_argument('--beta', type=float, default=0.999, help='beta for weights')
-    parser.add_argument('--sample', type=bool, default=True, help='use smart sampled data')
+    parser.add_argument('--sampled', type=bool, default=True, help='use smart sampled data')
 
     args = parser.parse_args()
 
@@ -374,5 +368,5 @@ if __name__ == '__main__':
           args.number_of_workers,
           args.model_checkpoint,
           args.beta,
-          args.sample)
+          args.sampled)
 

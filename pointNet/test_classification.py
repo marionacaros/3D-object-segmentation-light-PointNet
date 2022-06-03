@@ -19,15 +19,15 @@ from sklearn.metrics import auc
 
 
 def test(dataset_folder,
-         task,
          number_of_points,
          weighing_method,
          output_folder,
          number_of_workers,
          model_checkpoint):
+
     start_time = time.time()
     logging.info(f"Weighing method: {weighing_method}")
-
+    task='classification'
     checkpoint = torch.load(model_checkpoint)
 
     # Datasets train / test
@@ -203,7 +203,6 @@ def test(dataset_folder,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
-    parser.add_argument('task', type=str, choices=['classification', 'segmentation'], help='type of task')
     parser.add_argument('output_folder', type=str, help='output folder')
     parser.add_argument('--number_of_points', type=int, default=1000, help='number of points per cloud')
     parser.add_argument('--weighing_method', type=str, default='ISNS', help='sample weighing method')
@@ -218,7 +217,6 @@ if __name__ == '__main__':
     sys.path.insert(0, '/home/m.caros/work/objectDetection/pointNet')
 
     test(args.dataset_folder,
-         args.task,
          args.number_of_points,
          args.weighing_method,
          args.output_folder,

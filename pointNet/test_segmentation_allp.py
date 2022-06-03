@@ -11,9 +11,6 @@ from utils import *
 # from model.pointnet import *
 from model.light_pointnet_IGBVI import *
 
-from sklearn.metrics import precision_recall_curve
-from sklearn.metrics import f1_score
-from sklearn.metrics import auc
 
 if torch.cuda.is_available():
     logging.info(f"cuda available")
@@ -26,15 +23,12 @@ def test(dataset_folder,
          n_points,
          output_folder,
          number_of_workers,
-         model_checkpoint,
-         use_rnn):
+         model_checkpoint):
     start_time = time.time()
 
     checkpoint = torch.load(model_checkpoint)
-    mean_ptg_corrects = []
     mean_iou_tower = []
     mean_iou_veg = []
-    points_needed=0
     with open('pointNet/data/RGBN/RGBN_test_moved_towers_files.txt', 'r') as f:
         tower_files = f.read().splitlines()
     with open('pointNet/data/RGBN/RGBN_test_landscape_files.txt', 'r') as f:
@@ -60,12 +54,8 @@ def test(dataset_folder,
                                                   drop_last=False,
                                                   collate_fn=collate_segmen_padd)
 
-    if use_rnn:
-        model = RNNSegmentationPointNet(num_classes=test_dataset.NUM_SEGMENTATION_CLASSES,
-                                        hidden_size=256,
-                                        point_dimension=test_dataset.POINT_DIMENSION)
-    else:
-        model = SegmentationPointNet_IGBVI(num_classes=test_dataset.NUM_SEGMENTATION_CLASSES,
+
+    model = SegmentationPointNet_IGBVI(num_classes=test_dataset.NUM_SEGMENTATION_CLASSES,
                                      point_dimension=test_dataset.POINT_DIMENSION)
 
     if torch.cuda.is_available():
@@ -109,9 +99,6 @@ def test(dataset_folder,
         fp = np.array(detected_positive).sum() - tp
         fn = np.array(detected_negative).sum() - tn
 
-        # ptg_corrects = (corrects.sum() / points.shape[1]) * 100
-        # ptg_corrects = (detected_positive.sum() / all_positive)*100
-
         # summarize scores
         file_name = file_name[0].split('/')[-1]
         print(file_name)
@@ -140,18 +127,13 @@ def test(dataset_folder,
         print(preds.shape)
 
         points = np.concatenate((points.cpu().numpy(), preds), axis=1)
-        if use_rnn:
-            dir_results = 'segmentation_rnn'
-        else:
-            dir_results= 'segmentation_regular'
+        dir_results= 'segmentation_regular'
         with open(os.path.join(output_folder, dir_results,  file_name ), 'wb') as f:
             pickle.dump(points, f)
 
-    # mean_ptg_corrects = np.array(mean_ptg_corrects).sum()/len(mean_ptg_corrects)
     mean_iou_tower = np.array(mean_iou_tower).sum()/len(mean_iou_tower)
     mean_iou_veg = np.array(mean_iou_veg).sum()/len(mean_iou_veg)
     print('-------------')
-    # print('mean_ptg_corrects: ',mean_ptg_corrects)
     print('mean_iou_tower: ',mean_iou_tower)
     print('mean_iou_veg: ',mean_iou_veg)
     print('mean_iou: ',(mean_iou_tower + mean_iou_veg) / 2)
@@ -167,7 +149,6 @@ if __name__ == '__main__':
     parser.add_argument('--number_of_points', type=int, default=2000, help='number of points per cloud')
     parser.add_argument('--number_of_workers', type=int, default=0, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
-    parser.add_argument('--use_rnn', type=bool, default=False, help='True if want to use RNN model')
 
     args = parser.parse_args()
 
@@ -180,7 +161,6 @@ if __name__ == '__main__':
          args.number_of_points,
          args.output_folder,
          args.number_of_workers,
-         args.model_checkpoint,
-         args.use_rnn)
+         args.model_checkpoint)
 
 # python pointNet/test_segmentation.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --number_of_points 4096 --number_of_workers 0 --model_checkpoint

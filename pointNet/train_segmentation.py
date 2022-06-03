@@ -74,58 +74,27 @@ def train(
         with open('pointNet/data/val_landscape_files.txt', 'r') as f:
             bckg_files_val = f.read().splitlines()
 
+    custom_collate_fn = collate_segmen_padd
 
-    # Datasets train / val / test
-    # if task == 'classification':
-    #     custom_collate_fn = collate_classif_padd
-    #
-    #     writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_large_train' + 'B' + str(beta))
-    #     writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_large_val' + 'B' + str(beta))
-    #     logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
-    #
-    #     train_dataset = DATASETS[dataset](dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'data_no_ground'),
-    #                                       task=task, number_of_points=n_points,
-    #                                       towers_files=tower_files_train,
-    #                                       landscape_files=bckg_files_train,
-    #                                       fixed_num_points=True)
-    #     val_dataset = DATASETS[dataset](dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'data_no_ground'),
-    #                                     task=task, number_of_points=n_points,
-    #                                     towers_files=tower_files_val,
-    #                                     landscape_files=bckg_files_val,
-    #                                     fixed_num_points=True)
-    #
-    #
-    #     logging.info(f'Samples with towers in train: {train_dataset.len_towers}')
-    #     logging.info(f'Samples without towers in train: {train_dataset.len_landscape}')
-    #     logging.info(
-    #         f'Proportion towers/landscape: {round((train_dataset.len_towers / train_dataset.len_landscape) * 100, 3)}%')
-    #     logging.info(f'Samples with towers in val: {val_dataset.len_towers}')
-    #     logging.info(f'Samples without towers in val: {val_dataset.len_landscape}')
-    #     logging.info(
-    #         f'Proportion towers/landscape: {round((val_dataset.len_towers / val_dataset.len_landscape) * 100, 3)}%')
+    writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg_smart_train' )
+    writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg_smart_val')
 
-    if task == 'segmentation':
-        custom_collate_fn = collate_segmen_padd
+    logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg_smart_train' )
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg_smart_val')
+    landscape_files_train = bckg_files_train[:int(len(bckg_files_train) * 0.05)]
+    landscape_files_val = bckg_files_val[:int(len(bckg_files_val) * 0.05)]
+    logging.info(f'Samples with landscape for segmentation: {len(landscape_files_train)+len(landscape_files_val)}')
 
-        logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
-
-        landscape_files_train = bckg_files_train[:int(len(bckg_files_train) * 0.05)]
-        landscape_files_val = bckg_files_val[:int(len(bckg_files_val) * 0.05)]
-        logging.info(f'Samples with landscape for segmentation: {len(landscape_files_train)+len(landscape_files_val)}')
-
-        train_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_'+str(n_points)),
-                                          task=task, number_of_points=n_points,
-                                          towers_files=tower_files_train,
-                                          landscape_files=landscape_files_train,
-                                          fixed_num_points=True)
-        val_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_'+str(n_points)),
-                                        task=task, number_of_points=n_points,
-                                        towers_files=tower_files_val,
-                                        landscape_files=landscape_files_val,
-                                        fixed_num_points=True)
+    train_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_'+str(n_points)),
+                                      task=task, number_of_points=n_points,
+                                      towers_files=tower_files_train,
+                                      landscape_files=landscape_files_train,
+                                      fixed_num_points=True)
+    val_dataset = LidarDataset(dataset_folder=os.path.join(dataset_folder, 'pc_towers_40x40', 'sampled_'+str(n_points)),
+                                    task=task, number_of_points=n_points,
+                                    towers_files=tower_files_val,
+                                    landscape_files=landscape_files_val,
+                                    fixed_num_points=True)
 
     logging.info(f'Samples for training: {len(train_dataset)}')
     logging.info(f'Samples for validation: {len(val_dataset)}')
@@ -146,17 +115,14 @@ def train(
                                                  drop_last=True,
                                                  collate_fn=custom_collate_fn)
 
-    if task == 'segmentation':
-        if use_rnn:
-            print()
-            # model = RNNSegmentationPointNet_I(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
-            #                                 hidden_size=256,
-            #                                 point_dimension=train_dataset.POINT_DIMENSION)
-        else:
-            model = SegmentationPointNet_IGBVI(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
-                                            point_dimension=train_dataset.POINT_DIMENSION)
+    if use_rnn:
+        print()
+        # model = RNNSegmentationPointNet_I(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
+        #                                 hidden_size=256,
+        #                                 point_dimension=train_dataset.POINT_DIMENSION)
     else:
-        raise Exception('Unknown task !')
+        model = SegmentationPointNet_IGBVI(num_classes=train_dataset.NUM_SEGMENTATION_CLASSES,
+                                        point_dimension=train_dataset.POINT_DIMENSION)
 
     model.to(device)
 
@@ -202,7 +168,6 @@ def train(
         # --------------------------------------------- train loop ---------------------------------------------
         for data in train_dataloader:
             points, targets, filenames = data  # [7557, batch, dims], [4]
-            # np.random.shuffle(points)
 
             points = points.view(batch_size, n_points, -1).to(device)  # [batch, n_samples, dims]
             targets = targets.view(batch_size, -1).to(device)  # [batch, n_samples]
