@@ -32,7 +32,7 @@ Point cloud cubes not containing the target object are stored as well.  <br />
 Then, use PDAL library to get HAG data by executing the following code for all .LAS files: <br />
 ```
 pdal translate $input_file $output_file hag_nn --writers.las.extra_dims="HeightAboveGround=float32"
-``` <br />
+```
 
 Finally, run:
 ```
