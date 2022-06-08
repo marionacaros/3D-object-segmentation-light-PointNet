@@ -10,11 +10,14 @@ You may also need to install ```pdal``` library to transform height above sea (H
 pip install pdal
 ```
 
+## Preprocessing pipeline
+![plot](./doc/processing.png)
+
+
 ## Usage
 Execute the following commands from the main directory.
 
 ### Preprocessing
-![plot](./doc/processing.png)
 
 First, execute:
 ```
@@ -26,9 +29,11 @@ Then, objects are segmented and the center of each object is stored, objects wit
 Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one with without tower. <br />
 Point cloud cubes not containing the target object are stored as well.  <br />
 
-```bash compute_pdal_bash.sh``` or execute the following code for all .LAS files
+Then, use PDAL library to get HAG data:<br />
+```bash data_proc/compute_pdal_bash.sh``` or execute the following code for all .LAS files
 ```pdal translate $input_file $output_file hag_nn --writers.las.extra_dims="HeightAboveGround=float32"``` <br />
 
+Finally, run:
 ```
 python data_proc/2_preprocessing.py 
 ```
@@ -37,19 +42,18 @@ This function first removes ground and points above 100 meters and then stores a
 
 ### Object Segmentation
 
-Funtions for training and testing:<br />
+To train models use:<br />
 ```
 python pointNet/train_classification.py  /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 100 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4 --sampled True
 ```
 
 ```
-python pointNet/test_classification.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --weighing_method EFS --number_of_points 2048 --number_of_workers 0 --model_checkpoint $checkpoint_path
-```
-
-```
 python pointNet/train_segmentation.py /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4
 ```
-
+To test models use:<br />
+```
+python pointNet/test_classification.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --weighing_method EFS --number_of_points 2048 --number_of_workers 0 --model_checkpoint $checkpoint_path
+```
 ```
 python pointNet/test_segmentation.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --number_of_points 2048 --number_of_workers 0 --model_checkpoint
 ```
