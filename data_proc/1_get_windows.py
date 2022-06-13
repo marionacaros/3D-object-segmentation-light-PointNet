@@ -23,50 +23,49 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS, min_p = 20):
     start_time = time.time()
     logging.info(f"Dataset: {DATASET_NAME}")
 
-    # ------------------------------------------------- 1 --------------------------------------------------------
-    # Get LAS blocks containing towers
+    # # ------------------------------------------------- 1 --------------------------------------------------------
+    # Get LAS blocks containing towers and store x,y,z in dict
     logging.info('----------------- 1 -----------------')
     logging.info(f"Get point clouds of class {SEL_CLASS}")
+    # Get x,y,z of  points labeled as our target object (selClass)
     block_points_towers = get_pointCloud_selClass(LAS_PATH, selClass=SEL_CLASS)
 
+    # store dictionary of towers points
     if not os.path.exists('./dicts'):
         os.makedirs('dicts')
-
-    # save dictionary of towers points
-    with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
+    with open('dicts/dict_points_other_towers_' + DATASET_NAME + '.pkl', 'wb') as f:
         pickle.dump(block_points_towers, f)
-
     # Load dictionary
-    with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
-        block_points_towers = pickle.load(f)
+    # with open('dicts/dict_points_towers_' + DATASET_NAME + '.pkl', 'rb') as f:
+    #     block_points_towers = pickle.load(f)
 
     # ----------------------------------------------- 2 ----------------------------------------------------------
     # Sliding Window for tower segmentation
     logging.info('----------------- 2 -----------------')
     dic_pc_towers, dic_center_towers = object_segmentation(block_points_towers,
                                                            min_points=min_p,
-                                                           windowSize=[20, 20],
-                                                           stepSize_x=10,
-                                                           stepSize_y=20,
+                                                           windowSize=[50, 50],
+                                                           stepSize_x=25,
+                                                           stepSize_y=50,
                                                            show_prints=False)
-    with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
+    with open('dicts/dict_segmented_other_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'wb') as f:
         pickle.dump(dic_pc_towers, f)
-    with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
+    with open('dicts/dict_center_other_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'w') as f:
         json.dump(dic_center_towers, f)
 
     # Load dictionaries
-    with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'rb') as f:
-        dic_pc_towers = pickle.load(f)
+    # with open('dicts/dict_segmented_towers_w20p' + str(min_p) + DATASET_NAME + '.pkl', 'rb') as f:
+    #     dic_pc_towers = pickle.load(f)
     with open('dicts/dict_center_towers_w20p' + str(min_p) + DATASET_NAME + '.json', 'r') as f:
         dic_center_towers = json.load(f)
 
     # ------------------------------------------------ 3 ---------------------------------------------------------
-    # Loop over LAS files point clouds to get towers with context
+    # Loop over LAS files point clouds to get towers with context and store as LAS file
     logging.info('----------------- 3 -----------------')
-    get_context(dic_center_towers, w_size=[40, 40], path=LAS_PATH, dataset=DATASET_NAME)
+    get_context(dic_center_towers, w_size=[40, 40], path=LAS_PATH, dataset=DATASET_NAME, min_p=min_p, dirName='w_40x40')
 
-    # # -------------------------------------------------- 4 -------------------------------------------------------
-    # Store all points != selClass
+    # -------------------------------------------------- 4 -------------------------------------------------------
+    # Store all points != selClass as LAS
     logging.info('----------------- 4 -----------------')
     get_points_without_object(SEL_CLASS, path=LAS_PATH, center_t=dic_center_towers, dataset=DATASET_NAME)
 
@@ -86,7 +85,7 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS, min_p = 20):
 
 def get_pointCloud_selClass(path, selClass=15):
     """
-    Store x,y,z of points classified as a certain class (towers)
+    Get x,y,z of  points labeled as our target object (selClass)
     :param path:
     :param selClass: selected class
     :return: block_pc_towers -> points labeled as towers
@@ -149,7 +148,7 @@ def read_las_files(path):
     return dict_pc
 
 
-def get_context(dic_center_towers, w_size=[40, 40], path='', dataset=''):
+def get_context(dic_center_towers, w_size=[40, 40], path='', dataset='', min_p=10, dirName='w_towers_40x40'):
     logging.info("Getting context of towers")
     logging.info('Loading LAS files')
     count = 0
@@ -177,33 +176,33 @@ def get_context(dic_center_towers, w_size=[40, 40], path='', dataset=''):
                                              nir))
                 dict_w_c = dic_center_towers[fileName]
 
-                for w in dict_w_c:
+                # Data Augmentation
+                for ix in range(2):
+                    for w in dict_w_c:
+                        # get probabilities of variation for data augmentation
+                        p_xpos = random.randint(0, 10)
+                        p_xneg = random.randint(0, 10)
+                        p_ypos = random.randint(0, 10)
+                        p_yneg = random.randint(0, 10)
 
-                    # get probabilities of variation
-                    p_xpos = random.randint(0, 15)
-                    p_xneg = random.randint(0, 15)
-                    p_ypos = random.randint(0, 15)
-                    p_yneg = random.randint(0, 15)
+                        x = dict_w_c[w][0] + (p_xpos - p_xneg)
+                        y = dict_w_c[w][1] + (p_ypos - p_yneg)
+                        # print('x: ', (p_xpos - p_xneg))
+                        # print('y: ', p_ypos - p_yneg)
 
-                    x = dict_w_c[w][0] + (p_xpos - p_xneg)
-                    y = dict_w_c[w][1] + (p_ypos - p_yneg)
-
-                    # print('x: ', (p_xpos - p_xneg))
-                    # print('y: ', p_ypos - p_yneg)
-
-                    bool_w_x = np.logical_and(coords_pc_class[0] < (x + w_size[0] / 2),
-                                              coords_pc_class[0] > (x - w_size[0] / 2))
-                    bool_w_y = np.logical_and(coords_pc_class[1] < (y + w_size[1] / 2),
-                                              coords_pc_class[1] > (y - w_size[1] / 2))
-                    bool_w = np.logical_and(bool_w_x, bool_w_y)
-                    if not any(bool_w):
-                        logging.error(f'Error: No points in window {w}!')
-                    else:
-                        count += 1
-                        # store las file
-                        path_las_dir = os.path.join(save_path, 'w_towers_40x40_20p')
-                        new_file_name = 'tower20p_moved_3_' + DATASET_NAME + '_' + fileName + '_w' + str(w)
-                        store_las_file_from_pc(coords_pc_class[:, bool_w], new_file_name, path_las_dir, dataset)
+                        bool_w_x = np.logical_and(coords_pc_class[0] < (x + w_size[0] / 2),
+                                                  coords_pc_class[0] > (x - w_size[0] / 2))
+                        bool_w_y = np.logical_and(coords_pc_class[1] < (y + w_size[1] / 2),
+                                                  coords_pc_class[1] > (y - w_size[1] / 2))
+                        bool_w = np.logical_and(bool_w_x, bool_w_y)
+                        if not any(bool_w):
+                            logging.error(f'Error: No points in window {w}!')
+                        else:
+                            count += 1
+                            # store las file
+                            path_las_dir = os.path.join(save_path, dirName + '_' + str(min_p)+'p')
+                            new_file_name = 'tower_moved_'+str(ix+1)+'_' + DATASET_NAME + '_' + fileName + '_w' + str(w)
+                            store_las_file_from_pc(coords_pc_class[:, bool_w], new_file_name, path_las_dir, dataset)
 
     print('Total amount of window point clouds with towers:', count)
 
@@ -379,7 +378,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--output_folder', type=str, default='datasets', help='output folder')
-    parser.add_argument('--min_p', type=int, default=20, help='minimum number of points in object')
+    parser.add_argument('--min_p', type=int, default=10, help='minimum number of points in object')
     parser.add_argument('--sel_class', type=int, default=15, help='selected class')
     parser.add_argument('--dataset_name', type=str, default='CAT3', help='name of dataset')
     parser.add_argument('--LAS_files_path', type=str)
@@ -390,6 +389,18 @@ if __name__ == '__main__':
     DATASET_NAME = args.dataset_name
     LAS_files_path = args.LAS_files_path
 
-    save_path = os.path.join(args.output_folder,DATASET_NAME)
-    split_dataset_windows(DATASET_NAME, LAS_files_path, SEL_CLASS, args.min_p)
+    # Our Datasets
+    DATASETS = ['RIBERA', 'BDN', 'CAT3']
+    for DATASET_NAME in DATASETS:
+        # paths
+        if DATASET_NAME == 'BDN':
+            LAS_files_path = '/mnt/Lidar_K/PROJECTES/0025310000_VOLTA_MachineLearning_Badalona_FBK_5anys/Lliurament_211203_Mariona/LASCLAS_AMB_FOREST-URBAN/FOREST'
+        elif DATASET_NAME == 'CAT3':
+            LAS_files_path = '/mnt/Lidar_M/DEMO_Productes_LIDARCAT3/LAS_def'
+        elif DATASET_NAME == 'RIBERA':
+            LAS_files_path = '/mnt/Lidar_O/DeepLIDAR/VolVegetacioRibera_ClassTorres-Linies/LAS'
+
+        save_path = os.path.join(args.output_folder, DATASET_NAME)
+
+        split_dataset_windows(DATASET_NAME, LAS_files_path, SEL_CLASS, args.min_p)
 
