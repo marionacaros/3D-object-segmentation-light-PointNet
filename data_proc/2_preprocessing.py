@@ -23,7 +23,7 @@ def get_max(files_path):
             max_z = hag.max()
 
 
-def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=5000, n_points=2000,
+def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=5000, n_points=2048,
                                raw_data=False, dataset=''):
     """
     1- Remove certain labeled points (by Terrasolid) to reduce noise and number of points
@@ -45,12 +45,12 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
     count_less_2000 = 0
     total_count = 0
 
-    path_no_ground_dir = os.path.join(out_path, 'data_no_ground')
-    print(f'output path: {path_no_ground_dir}')
-    if not os.path.exists(path_no_ground_dir):
-        os.makedirs(path_no_ground_dir)
+    out_path = os.path.join(out_path, 'sampled_'+str(n_points))
+    print(f'output path: {out_path}')
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
 
-    files = glob.glob(os.path.join(files_path, 'tower20p*.las'))  # TODO change path
+    files = glob.glob(os.path.join(files_path, 'tower*.las'))  # TODO check path
     for file in progressbar(files):
         fileName = file.split('/')[-1].split('.')[0]
         data_f = laspy.read(file)
@@ -112,8 +112,6 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                 # normalize NDVI
                 pc[:, 9] = (pc[:, 9] + 1) / 2
                 pc[:, 9] = np.clip(pc[:, 9], 0.0, 1.0)
-                # return number not normalized
-                # number of returns not normalized
 
                 if not raw_data:
 
@@ -149,7 +147,7 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                         if pc[:, 2].max() > max_z:
                             print('Outliers not removed correctly!!')
                         total_count += 1
-                        f_path = os.path.join(path_no_ground_dir, fileName)
+                        f_path = os.path.join(out_path, fileName)
                         with open(f_path + '.pkl', 'wb') as f:
                             pickle.dump(pc, f)
                     else:
@@ -158,7 +156,7 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                     # store raw data
                     if pc.shape[0] >= 1000:  # remove windows with less than 1000 points
                         total_count += 1
-                        f_path = os.path.join(path_no_ground_dir, fileName)
+                        f_path = os.path.join(out_path, fileName)
                         with open(f_path + '.pkl', 'wb') as f:
                             pickle.dump(pc, f)
                     else:
@@ -170,7 +168,7 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
     print(f'count_mantain_terrain_p: {count_mantain_terrain_p}')
     print(f'count_less {n_points}: {count_less_2000}')
     print(f'total_count: {total_count}')
-    return path_no_ground_dir
+    return out_path
 
 
 def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
@@ -304,30 +302,26 @@ def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
 
 if __name__ == '__main__':
 
-    N_POINTS = 4096
+    N_POINTS = 2048
     MAX_Z = 100.0
     raw_data = False
     logging.info(f'Want raw data: {raw_data}') # if raw data == True code does not remove ground points
 
-    # DATASET = 'CAT3'
-    # paths = ['/home/m.caros/work/objectDetection/datasets/' + DATASET + '/w_towers_40x40',
-    #          '/home/m.caros/work/objectDetection/datasets/' + DATASET + '/w_no_towers_40x40']
-
-    for DATASET in ['RIBERA', 'BDN']:  #
-        # paths = ['/home/m.caros/work/objectDetection/datasets/' + DATASET + '/w_towers_40x40_20p']
-        paths = ['/dades/LIDAR/towers_detection/datasets/pc_towers_40x40/data_no_ground']
+    for DATASET in ['CAT3','RIBERA', 'BDN']:
+        paths = ['datasets/' + DATASET + '/w_towers_40x40_10p',
+                 'datasets/' + DATASET + '/w_no_towers_40x40']
 
         start_time = time.time()
         for files_path in paths:
             logging.info(f'Input path: {files_path}')
 
             # IMPORTANT !!!!!!!!!
-            # execute compute_pdal_bash.sh  # get HeighAboveGround
+            # execute compute_pdal_bash.sh  # to get HeighAboveGround
 
-            if 'w_towers' in files_path:
-                out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
-            elif 'w_no_towers' in files_path:
-                out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
+            # if 'w_towers' in files_path:
+            out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
+            # elif 'w_no_towers' in files_path:
+            #     out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
 
             # ------ Remove ground, noise and outliers and normalize ------
             logging.info(f"1. Remove points of ground, noise and outliers and normalize ")
