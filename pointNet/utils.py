@@ -29,7 +29,7 @@ def collate_segmen_padd(batch):
     return batch_data, targets, filenames
 
 
-def collate_classif_padd(batch):
+def collate_classif_padd(batch, n_points=2048):
     '''
     Padds batch of variable length
 
@@ -37,20 +37,19 @@ def collate_classif_padd(batch):
     assume it takes in images rather than arbitrary tensors.
     '''
     # get sequence lengths
-    # lengths = torch.tensor([t[0].shape[0] for t in batch]).to(device)
+    lengths = torch.tensor([t[0].shape[0] for t in batch])
     targets = [t[1] for t in batch]
     targets = torch.LongTensor(targets)
     batch_data = [torch.Tensor(t[0]) for t in batch]
-    # padd
-    # targets = torch.nn.utils.rnn.pad_sequence(targets)
-    batch_data = torch.nn.utils.rnn.pad_sequence(batch_data)
 
+    # padd
+    batch_data = torch.nn.utils.rnn.pad_sequence(batch_data,batch_first=True, padding_value=0.0)  # [max_length,B,D]
     # file names
     filenames = [t[2] for t in batch]
 
     # compute mask
     # mask = (batch_data != 0)
-    return batch_data, targets, filenames
+    return batch_data, targets, filenames, lengths
 
 
 def blockPrint():
