@@ -46,11 +46,11 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
     total_count = 0
 
     out_path = os.path.join(out_path, 'sampled_'+str(n_points))
-    print(f'output path: {out_path}')
+    logging.info(f'output path: {out_path}')
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    files = glob.glob(os.path.join(files_path, 'tower*.las'))  # TODO check path
+    files = glob.glob(os.path.join(files_path, '*.las'))
     for file in progressbar(files):
         fileName = file.split('/')[-1].split('.')[0]
         data_f = laspy.read(file)
@@ -118,7 +118,7 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                     # Check if points different from terrain < 2000
                     len_pc = pc[pc[:, 3] != 2].shape[0]
 
-                    if 10 < len_pc < n_points:
+                    if 20 < len_pc < n_points:
                         # Get indices of terrain points
                         labels = pc[:, 3]
                         i_terrain = [i for i in range(len(labels)) if labels[i] == 2.0]
@@ -139,8 +139,8 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                     elif len_pc >= n_points:
                         pc = pc[pc[:, 3] != 2, :]
 
-                    elif len_pc <= 10:
-                        print(f'Point cloud {fileName} not stored. Less than 10 points. Only {len_pc} points')
+                    elif len_pc <= 20:
+                        print(f'Point cloud {fileName} not stored. Less than 20 points. Only {len_pc} points')
                         continue
 
                     if pc.shape[0] >= n_points:
@@ -154,13 +154,13 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
                         print(f'Point cloud {fileName} not stored. Number of points < {n_points}')
                 else:
                     # store raw data
-                    if pc.shape[0] >= 1000:  # remove windows with less than 1000 points
+                    if pc.shape[0] >= n_points:  # remove windows with less than 1000 points
                         total_count += 1
                         f_path = os.path.join(out_path, fileName)
                         with open(f_path + '.pkl', 'wb') as f:
                             pickle.dump(pc, f)
                     else:
-                        print(f'Point cloud {fileName} not stored. Less than 1000 points. Only {pc.shape[0]} points')
+                        print(f'Point cloud {fileName} not stored. Less than {n_points} points. Only {pc.shape[0]} points')
 
             except Exception as e:
                 print(f'Error {e} in file {fileName}')
@@ -168,40 +168,35 @@ def remove_ground_and_outliers(files_path, out_path, max_z=100.0, max_intensity=
     print(f'count_mantain_terrain_p: {count_mantain_terrain_p}')
     print(f'count_less {n_points}: {count_less_2000}')
     print(f'total_count: {total_count}')
-    return out_path
 
 
-def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
+def sampling(files_path, n_points, TH_1=3.0, TH_2=8.0):
     count_interpolate = 0
     count_sample3 = 0
     count_sample8 = 0
     count_sample_all = 0
 
-    dir_path = os.path.dirname(files_path)
-    path_sampled = os.path.join(dir_path, 'sampled_' + str(N_POINTS))
-    if not os.path.exists(path_sampled):
-        os.makedirs(path_sampled)
-
-    files_path= os.path.join(files_path, '*.pkl')
-    files = glob.glob(files_path)
-    for file in progressbar(files):
+    path_sampled = os.path.join(files_path, 'sampled_'+str(n_points))
+    logging.info(f'path: {path_sampled}')
+    # if not os.path.exists(path_sampled):
+    #     os.makedirs(path_sampled)
+    for file in progressbar(glob.glob(os.path.join(path_sampled,'*pkl'))):
         fileName = file.split('/')[-1].split('.')[0]
         with open(file, 'rb') as f:
-            pc = pickle.load(f).astype(np.float32)  # [3890, 12]
-
+            pc = pickle.load(f).astype(np.float32)
         # add column of zeros
-        pc = np.c_[pc, np.zeros(pc.shape[0])]
-        # if number of points > N_POINTS sampling is needed
-        if pc.shape[0] > N_POINTS:
+        pc = np.c_[pc, np.zeros(pc.shape[0])] # column ix=10
+
+        # if number of points > n_points sampling is needed
+        if pc.shape[0] > n_points:
             pc_veg = pc[pc[:, 2] <= TH_1]
             pc_other = pc[pc[:, 2] > TH_1]
-
-            # Number of points above 3m < 1000
-            if pc_other.shape[0] < N_POINTS:
-                end_veg_p = N_POINTS - pc_other.shape[0]
+            # Number of points above 3m < n_points
+            if pc_other.shape[0] < n_points:
+                end_veg_p = n_points - pc_other.shape[0]
                 count_sample3 += 1
             else:
-                end_veg_p = N_POINTS
+                end_veg_p = n_points
             # if num points in vegetation > points to sample
             if pc_veg.shape[0] > end_veg_p:
                 # rdm sample points < thresh 1
@@ -210,54 +205,54 @@ def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
                 sampling_indices = range(pc_veg.shape[0])
             # pc_veg = pc_veg[sampling_indices, :]
             # sampled indices
-            pc_veg[sampling_indices, -1] = 1
-            pc_other[:,-1] = 1
+            pc_veg[sampling_indices, 10] = 1
+            pc_other[:, 10] = 1
             pc_sampled = np.concatenate((pc_other, pc_veg), axis=0)
             # print(f'--> sampled pc shape {pc_sampled.shape}')
 
-            # if we still have > N_POINTS in point cloud
-            if pc_other.shape[0] > N_POINTS:
+            # if we still have > n_points in point cloud
+            if pc_other.shape[0] > n_points:
                 pc_high_veg = pc[pc[:, 2] <= TH_2]
                 pc_other = pc[pc[:, 2] > TH_2]
-                pc_other[:, -1] = 1
-                # Number of points above 8m < N_POINTS
-                if pc_other.shape[0] < N_POINTS:
-                    end_veg_p = N_POINTS - pc_other.shape[0]
+                pc_other[:, 10] = 1
+                # Number of points above 8m < n_points
+                if pc_other.shape[0] < n_points:
+                    end_veg_p = n_points - pc_other.shape[0]
                     count_sample8 += 1
                 else:
-                    end_veg_p = N_POINTS
+                    end_veg_p = n_points
                 # if num points in vegetation > points to sample
                 if pc_high_veg.shape[0] > end_veg_p:
                     sampling_indices = random.sample(range(0,pc_high_veg.shape[0]), k=end_veg_p)
                     # pc_high_veg = pc_high_veg[sampling_indices, :]
-                    pc_high_veg[sampling_indices,-1] = 1
+                    pc_high_veg[sampling_indices, 10] = 1
                     pc_sampled = np.concatenate((pc_other, pc_high_veg), axis=0)
                 else:
                     pc_sampled = pc_other
 
-                # if we still have > N_POINTS in point cloud
-                if pc_sampled.shape[0] > N_POINTS:
+                # if we still have > n_points in point cloud
+                if pc_sampled.shape[0] > n_points:
                     # rdm sample all point cloud
-                    sampling_indices = random.sample(range(0,pc_sampled.shape[0]), k=N_POINTS)
+                    sampling_indices = random.sample(range(0,pc_sampled.shape[0]), k=n_points)
                     # pc_sampled = pc_sampled[sampling_indices, :]
-                    pc_sampled[:, -1] = 0
-                    pc_sampled[sampling_indices, -1] = 1
+                    pc_sampled[:, 10] = 0
+                    pc_sampled[sampling_indices, 10] = 1
                     count_sample_all += 1
 
             with open(os.path.join(path_sampled, fileName) + '.pkl', 'wb') as f:
                 pickle.dump(pc_sampled, f)
 
-        elif pc.shape[0] == N_POINTS:
-            pc[:,-1]=1
+        elif pc.shape[0] == n_points:
+            pc[:,10]=1
             pc_sampled = pc
             with open(os.path.join(path_sampled, fileName) + '.pkl', 'wb') as f:
                 pickle.dump(pc_sampled, f)
 
         ##################################### ADD SYNTHETIC SAMPLES ###########################################
         else:
-            # if MIN_POINTS < pc.shape[0] < N_POINTS:
+            # if MIN_POINTS < pc.shape[0] < n_points:
             count_interpolate += 1
-            pc[:, -1] = 1
+            pc[:, 10] = 1
             pc_sampled = pc
             with open(os.path.join(path_sampled, fileName) + '.pkl', 'wb') as f:
                 pickle.dump(pc_sampled, f)
@@ -265,7 +260,7 @@ def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
             # i = 0
             # new_pc = list(pc)
             # # while points < 1000 keep duplicating
-            # while (len(new_pc) < N_POINTS):
+            # while (len(new_pc) < n_points):
             #     if i >= len(pc[:, 0]) - 1:
             #         i = 0
             #     else:
@@ -296,7 +291,7 @@ def sampling(files_path, DATASET, N_POINTS, TH_1=3.0, TH_2=8.0):
     print(f'counter sampled below {TH_2} m: {count_sample8}')
     print(f'counter sampled all: {count_sample_all}')
     print(f'counter total sampled: {count_sample3 + count_sample8 + count_sample_all}')
-    print(f'counter added synthetic data: {count_interpolate}')
+    print(f'counter less than n_points: {count_interpolate}')
     # print(f'Discarded point clouds because < {MIN_POINTS} points: ', c_min_points)
 
 
@@ -306,10 +301,13 @@ if __name__ == '__main__':
     MAX_Z = 100.0
     raw_data = False
     logging.info(f'Want raw data: {raw_data}') # if raw data == True code does not remove ground points
+    main_path='/home/m.caros/work/objectDetection/'
+    out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
+
 
     for DATASET in ['CAT3','RIBERA', 'BDN']:
-        paths = ['datasets/' + DATASET + '/w_towers_40x40_10p',
-                 'datasets/' + DATASET + '/w_no_towers_40x40']
+        paths = [main_path +'datasets/' + DATASET + '/w_towers_40x40_10p',
+                 main_path +'datasets/' + DATASET + '/w_no_towers_40x40']
 
         start_time = time.time()
         for files_path in paths:
@@ -318,27 +316,17 @@ if __name__ == '__main__':
             # IMPORTANT !!!!!!!!!
             # execute compute_pdal_bash.sh  # to get HeighAboveGround
 
-            # if 'w_towers' in files_path:
-            out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
-            # elif 'w_no_towers' in files_path:
-            #     out_path = '/dades/LIDAR/towers_detection/datasets/pc_no_towers_40x40'
-
             # ------ Remove ground, noise and outliers and normalize ------
             logging.info(f"1. Remove points of ground, noise and outliers and normalize ")
-            no_ground_path = remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000,
+            remove_ground_and_outliers(files_path, out_path, max_z=MAX_Z, max_intensity=5000,
                                                         n_points=N_POINTS, raw_data=raw_data, dataset=DATASET)
             print("--- Remove ground and noise time: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
-
             rm_ground_time = time.time()
-            # no_ground_path = os.path.join(out_path, 'data_no_ground')
-            print(f'Ground path {no_ground_path}')
 
-            no_ground_path='/dades/LIDAR/towers_detection/datasets/pc_towers_40x40/data_no_ground'
-            # ------ sampling ------
-            logging.info(f"2. Sampling")
-            sampling(no_ground_path, DATASET, N_POINTS=N_POINTS, TH_1=3.0 / MAX_Z, TH_2=8.0 / MAX_Z)
+    # ------ sampling ------
+    logging.info(f"2. Sampling")
+    sampling(out_path,  n_points=N_POINTS, TH_1=3.0 / MAX_Z, TH_2=8.0 / MAX_Z)
 
-            # print("--- Sample and interpolate time: %s h ---" % (round((time.time() - rm_ground_time) / 3600, 3)))
-
+    print("--- Sample and interpolate time: %s h ---" % (round((time.time() - rm_ground_time) / 3600, 3)))
     print("--- TOTAL TIME: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
     
