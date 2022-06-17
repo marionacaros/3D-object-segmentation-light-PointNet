@@ -301,13 +301,12 @@ if __name__ == '__main__':
     MAX_Z = 100.0
     raw_data = False
     logging.info(f'Want raw data: {raw_data}') # if raw data == True code does not remove ground points
-    main_path='/home/m.caros/work/objectDetection/'
     out_path = '/dades/LIDAR/towers_detection/datasets/pc_towers_40x40'
 
 
     for DATASET in ['CAT3','RIBERA', 'BDN']:
-        paths = [main_path +'datasets/' + DATASET + '/w_towers_40x40_10p',
-                 main_path +'datasets/' + DATASET + '/w_no_towers_40x40']
+        paths = ['datasets/' + DATASET + '/w_towers_40x40_10p',
+                 'datasets/' + DATASET + '/w_no_towers_40x40']
 
         start_time = time.time()
         for files_path in paths:
