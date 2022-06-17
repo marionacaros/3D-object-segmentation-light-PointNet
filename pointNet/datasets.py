@@ -23,7 +23,8 @@ class LidarDataset(data.Dataset):
         self.tower_files = towers_files
         self.landscape_files = landscape_files
         self.fixed_num_points = fixed_num_points
-
+        self.len_towers = len(self.tower_files)
+        self.len_landscape = len(self.landscape_files)
         self.classes_mapping = {}
         for file in self.landscape_files:
             self.classes_mapping[file] = 0
@@ -31,8 +32,6 @@ class LidarDataset(data.Dataset):
             self.classes_mapping[file] = 1
 
         if task == 'classification':
-            self.len_towers = len(self.tower_files)
-            self.len_landscape = len(self.landscape_files)
             self.paths_towers = [self.dataset_folder +  f for f in self.tower_files]
             self.paths_landscape = [self.dataset_folder  + f for f in self.landscape_files]
             self.paths_files = self.paths_towers + self.paths_landscape
@@ -54,8 +53,8 @@ class LidarDataset(data.Dataset):
             # 1 -> tower
         return self.prepare_data(self.paths_files[index],
                                  self.number_of_points,
-                                 fixed_num_points=self.fixed_num_points,
                                  point_cloud_class=point_cloud_class,
+                                 fixed_num_points=self.fixed_num_points,
                                  task=self.task)
 
     @staticmethod
@@ -66,11 +65,16 @@ class LidarDataset(data.Dataset):
                      task='classification'):
 
         with open(point_file, 'rb') as f:
-            pc = pickle.load(f).astype(np.float32)  # [2048, 10]
+            pc = pickle.load(f).astype(np.float32)  # [2048, 11]
+        # pc = pc[:,:10]
         # get points labeled for sampling
-        # if fixed_num_points:
-        #     pc = pc[pc[:,-1]==1] # todo add this line when processing is changed
+        if fixed_num_points:
+            pc = pc[pc[:,-1]==1]
 
+        # todo debug
+        if pc.shape[0] > 20480:
+            sampling_indices = np.random.choice(pc.shape[0], 20480)
+            pc = pc[sampling_indices, :]
         # sample points if needed
         if fixed_num_points and pc.shape[0] > number_of_points:
             sampling_indices = np.random.choice(pc.shape[0], number_of_points)
@@ -91,7 +95,7 @@ class LidarDataset(data.Dataset):
 
         elif task == 'classification':
             labels = point_cloud_class
-
+        print(pc.shape)
         pc = torch.from_numpy(pc)
         labels = torch.tensor(labels)
         return pc, labels, point_file
