@@ -62,12 +62,12 @@ def split_dataset_windows(DATASET_NAME, LAS_PATH, SEL_CLASS, min_p = 20):
     # ------------------------------------------------ 3 ---------------------------------------------------------
     # Loop over LAS files point clouds to get towers with context and store as LAS file
     logging.info('----------------- 3 -----------------')
-    get_context(dic_center_towers, w_size=[40, 40], path=LAS_PATH, dataset=DATASET_NAME, min_p=min_p, dirName='w_40x40')
+    get_context(dic_center_towers, w_size=[70, 70], path=LAS_PATH, dataset=DATASET_NAME, min_p=min_p)
 
     # -------------------------------------------------- 4 -------------------------------------------------------
     # Store all points != selClass as LAS
     logging.info('----------------- 4 -----------------')
-    get_points_without_object(SEL_CLASS, path=LAS_PATH, center_t=dic_center_towers, dataset=DATASET_NAME)
+    get_points_without_object(SEL_CLASS, w_size=[70, 70], path=LAS_PATH, center_t=dic_center_towers, dataset=DATASET_NAME)
 
     print("--- TOTAL TIME: %s h ---" % (round((time.time() - start_time) / 3600, 3)))
     # ------------------------------------------------------------------------------------------------------------
@@ -148,9 +148,11 @@ def read_las_files(path):
     return dict_pc
 
 
-def get_context(dic_center_towers, w_size=[40, 40], path='', dataset='', min_p=10, dirName='w_towers_40x40'):
+def get_context(dic_center_towers, w_size=[40, 40], path='', dataset='', min_p=10, variation=False):
     logging.info("Getting context of towers")
     logging.info('Loading LAS files')
+
+    dirName = 'w_towers_'+str(w_size[0])+'x'+str(w_size[1])
     count = 0
     files = glob.glob(os.path.join(path, '*.las'))
     with alive_bar(len(files), bar='bubbles', spinner='notes2') as bar:
@@ -179,16 +181,21 @@ def get_context(dic_center_towers, w_size=[40, 40], path='', dataset='', min_p=1
                 # Data Augmentation
                 for ix in range(2):
                     for w in dict_w_c:
-                        # get probabilities of variation for data augmentation
-                        p_xpos = random.randint(0, 10)
-                        p_xneg = random.randint(0, 10)
-                        p_ypos = random.randint(0, 10)
-                        p_yneg = random.randint(0, 10)
 
-                        x = dict_w_c[w][0] + (p_xpos - p_xneg)
-                        y = dict_w_c[w][1] + (p_ypos - p_yneg)
-                        # print('x: ', (p_xpos - p_xneg))
-                        # print('y: ', p_ypos - p_yneg)
+                        if variation:
+                            # get probabilities of variation for data augmentation
+                            p_xpos = random.randint(0, 10)
+                            p_xneg = random.randint(0, 10)
+                            p_ypos = random.randint(0, 10)
+                            p_yneg = random.randint(0, 10)
+
+                            x = dict_w_c[w][0] + (p_xpos - p_xneg)
+                            y = dict_w_c[w][1] + (p_ypos - p_yneg)
+                            # print('x: ', (p_xpos - p_xneg))
+                            # print('y: ', p_ypos - p_yneg)
+                        else:
+                            x = dict_w_c[w][0]
+                            y = dict_w_c[w][1]
 
                         bool_w_x = np.logical_and(coords_pc_class[0] < (x + w_size[0] / 2),
                                                   coords_pc_class[0] > (x - w_size[0] / 2))
@@ -248,7 +255,7 @@ def store_las_file_from_pc(pc, fileName, path_las_dir, dataset):
             pickle.dump(nir, f)
 
 
-def get_points_without_object(selClass, path='', center_t={}, dataset=''):
+def get_points_without_object(selClass, w_size=[70, 70], path='', center_t={}, dataset=''):
     """get windows without towers
        Points labeled as selClass are removed """
 
@@ -257,7 +264,7 @@ def get_points_without_object(selClass, path='', center_t={}, dataset=''):
     c_filter = 0
     c_no_t = 0
     files = glob.glob(os.path.join(path, '*.las'))
-    dir_name = 'w_no_towers_40x40'
+    dir_name = 'w_no_towers_'+str(w_size[0])+'x'+str(w_size[1])
 
     if not os.path.exists(os.path.join(save_path,dir_name)):
         os.makedirs(os.path.join(save_path,dir_name))
@@ -293,7 +300,7 @@ def get_points_without_object(selClass, path='', center_t={}, dataset=''):
                 # Get LAS files not containing towers
                 block_pc = points
                 c_no_t += 1
-            split_pointCloud(block_pc, f_name=name_f, dir=dir_name, path=save_path, w_size=[40, 40], c_tow=center_t,
+            split_pointCloud(block_pc, f_name=name_f, dir=dir_name, path=save_path, w_size=w_size, c_tow=center_t,
                              dataset=dataset)
             bar()
 
@@ -378,8 +385,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--output_folder', type=str, default='datasets', help='output folder')
-    parser.add_argument('--min_p', type=int, default=10, help='minimum number of points in object')
-    parser.add_argument('--sel_class', type=int, default=15, help='selected class')
+    parser.add_argument('--min_p', type=int, default=300, help='minimum number of points in object')
+    parser.add_argument('--sel_class', type=int, default=18, help='selected class')
     parser.add_argument('--dataset_name', type=str, default='CAT3', help='name of dataset')
     parser.add_argument('--LAS_files_path', type=str)
 
