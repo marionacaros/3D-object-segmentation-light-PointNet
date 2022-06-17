@@ -67,6 +67,8 @@ class LidarDataset(data.Dataset):
         with open(point_file, 'rb') as f:
             pc = pickle.load(f).astype(np.float32)  # [2048, 11]
         # pc = pc[:,:10]
+        np.random.shuffle(pc)
+
         # get points labeled for sampling
         if fixed_num_points:
             pc = pc[pc[:,-1]==1]
@@ -95,7 +97,7 @@ class LidarDataset(data.Dataset):
 
         elif task == 'classification':
             labels = point_cloud_class
-        print(pc.shape)
+
         pc = torch.from_numpy(pc)
         labels = torch.tensor(labels)
         return pc, labels, point_file
