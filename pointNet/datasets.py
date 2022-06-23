@@ -14,33 +14,28 @@ class LidarDataset(data.Dataset):
     NUM_SEGMENTATION_CLASSES = 2
 
     def __init__(self, dataset_folder, task='classification', number_of_points=None,
-                 towers_files=None,
-                 landscape_files=None,
-                 fixed_num_points=True):
+                 files=None,
+                 fixed_num_points=True,
+                 c_sample=False):
+        # 0 -> no tower
+        # 1 -> tower
+
         self.dataset_folder = dataset_folder + '/'  # /dades/LIDAR/towers_detection/datasets/
         self.number_of_points = number_of_points
         self.task = task
-        self.tower_files = towers_files
-        self.landscape_files = landscape_files
+        self.files = files
         self.fixed_num_points = fixed_num_points
-        self.len_towers = len(self.tower_files)
-        self.len_landscape = len(self.landscape_files)
         self.classes_mapping = {}
-        for file in self.landscape_files:
-            self.classes_mapping[file] = 0
-        for file in self.tower_files:
-            self.classes_mapping[file] = 1
+        self.constrained_sampling=c_sample
+        for file in self.files:
+            if 'pc_' in file:
+                self.classes_mapping[file] = 0
+            elif 'tower_' in file:
+                self.classes_mapping[file] = 1
+        self.len_towers = sum(value == 1 for value in self.classes_mapping.values())
+        self.len_landscape = sum(value == 0 for value in self.classes_mapping.values())
 
-        if task == 'classification':
-            self.paths_towers = [self.dataset_folder +  f for f in self.tower_files]
-            self.paths_landscape = [self.dataset_folder  + f for f in self.landscape_files]
-            self.paths_files = self.paths_towers + self.paths_landscape
-            self.files = self.tower_files + self.landscape_files
-
-        elif task == 'segmentation':
-            self.paths_towers = [self.dataset_folder +  f for f in self.tower_files]
-            self.paths_landscape = [self.dataset_folder  + f for f in self.landscape_files]
-            self.paths_files = self.paths_towers + self.paths_landscape
+        self.paths_files = [self.dataset_folder + f for f in self.files]
 
     def __len__(self):
         return len(self.paths_files)
@@ -49,20 +44,21 @@ class LidarDataset(data.Dataset):
         point_cloud_class = None
         if self.task == 'classification':
             point_cloud_class = self.classes_mapping[self.files[index]]  # needed for classification
-            # 0 -> no tower
-            # 1 -> tower
+
         return self.prepare_data(self.paths_files[index],
                                  self.number_of_points,
                                  point_cloud_class=point_cloud_class,
                                  fixed_num_points=self.fixed_num_points,
-                                 task=self.task)
+                                 task=self.task,
+                                 c_sample=self.constrained_sampling)
 
     @staticmethod
     def prepare_data(point_file,
                      number_of_points=None,
                      point_cloud_class=None,
                      fixed_num_points=True,
-                     task='classification'):
+                     task='classification',
+                     c_sample=False):
 
         with open(point_file, 'rb') as f:
             pc = pickle.load(f).astype(np.float32)  # [2048, 11]
@@ -70,13 +66,14 @@ class LidarDataset(data.Dataset):
         np.random.shuffle(pc)
 
         # get points labeled for sampling
-        if fixed_num_points:
-            pc = pc[pc[:,-1]==1]
+        if c_sample:
+            pc = pc[pc[:, -1] == 1]
 
-        # todo debug
+        # max num of points
         if pc.shape[0] > 20480:
             sampling_indices = np.random.choice(pc.shape[0], 20480)
             pc = pc[sampling_indices, :]
+
         # sample points if needed
         if fixed_num_points and pc.shape[0] > number_of_points:
             sampling_indices = np.random.choice(pc.shape[0], number_of_points)
@@ -99,7 +96,6 @@ class LidarDataset(data.Dataset):
             labels = point_cloud_class
 
         pc = torch.from_numpy(pc)
-        labels = torch.tensor(labels)
         return pc, labels, point_file
 
 
