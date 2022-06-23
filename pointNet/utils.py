@@ -38,8 +38,7 @@ def collate_classif_padd(batch, n_points=2048):
     '''
     # get sequence lengths
     lengths = torch.tensor([t[0].shape[0] for t in batch])
-    targets = [t[1] for t in batch]
-    targets = torch.LongTensor(targets)
+    targets = torch.tensor([t[1] for t in batch])
     batch_data = [torch.Tensor(t[0]) for t in batch]
 
     # padd
@@ -234,20 +233,15 @@ def get_weights_sklearn(n_of_classes, samples_per_cls):
     return weights4class
 
 
-def get_weights_transformed_for_sample(sample_weighing_method, n_classes, samples_per_cls, beta=None, labels=None,
-                                       task='classification'):
+def get_weights4class(sample_weighing_method, n_classes, samples_per_cls, beta=None):
     """
-    This function applies the given Sample Weighting Scheme and returns the sample weights normalized over a batch
-    Args:
-        sample weighing_method: str, options available: "EFS" "INS" "ISNS"
-        n_classes: int, representing the total number of classes in the entire train set
-        samples_per_cls: A python list of size [n_classes]
-        labels: torch tensor of size [batch] containing labels
-        beta: float,
-    Returns:
-        weights_for_samples: torch. tensor of size [batch, n_classes]
+       :param sample weighing_method: str, options available: "EFS" "INS" "ISNS"
+       :param n_classes: int, representing the total number of classes in the entire train set
+       :param samples_per_cls: A python list of size [n_classes]
+       :param labels: torch tensor of size [batch] containing labels
+       :param beta: float,
+       :return weights4class: torch. tensor of size [batch, n_classes]
     """
-
     if sample_weighing_method == 'EFS':
         weights4class = get_weights_effective_num_of_samples(n_classes, beta, samples_per_cls)
     elif sample_weighing_method == 'INS':
@@ -260,19 +254,116 @@ def get_weights_transformed_for_sample(sample_weighing_method, n_classes, sample
         return None
 
     weights4class = torch.tensor(weights4class).float()
-    weights4samples = None
+    return weights4class
 
-    if task == 'classification':
-        # one-hot encoding
-        labels = labels.to('cpu').numpy()  # [batch] labels defines columns of non-zero elements
-        one_hot = np.zeros((labels.size, 2))  # [batch, 2]
-        rows = np.arange(labels.size)
-        one_hot[rows, labels] = 1
 
-        weights4samples = weights4class.unsqueeze(0)
-        weights4samples = weights4samples.repeat(labels.shape[0], 1)
-        weights4samples = torch.tensor(np.array(weights4samples * one_hot))
-        weights4samples = weights4samples.sum(1).cpu()
+def get_weights4sample(weights4class, labels=None):
 
-    return weights4class, weights4samples
+    # one-hot encoding
+    labels = labels.to('cpu').numpy()  # [batch] labels defines columns of non-zero elements
+    one_hot = np.zeros((labels.size, 2))  # [batch, 2]
+    rows = np.arange(labels.size)
+    one_hot[rows, labels] = 1
+
+    weights4samples = weights4class.unsqueeze(0)
+    weights4samples = weights4samples.repeat(labels.shape[0], 1)
+    weights4samples = torch.tensor(np.array(weights4samples * one_hot))
+    weights4samples = weights4samples.sum(1).cpu()
+
+    return weights4samples
+
+
+def sample_point_cloud(points, n_points=2048, plot=False, writer_tensorboard=None, filenames=[], lengths=[],
+                       targets=[], device='cuda'):
+    """get fixed size samples of point cloud in windows
+
+
+    :param points: input point cloud [batch, n_samples, dims]
+    :param n_points: number of points
+    :param plot:
+    :param writer_tensorboard:
+
+    :return pc_w: point cloud in windows of fixed size
+    """
+    pc_w = torch.FloatTensor().to(device)
+    count_p = 0
+    j = 0
+    while count_p < points.shape[1]:
+        end_batch = n_points * (j + 1)
+        if end_batch <= points.shape[1]:
+            # sample
+            in_points = points[:, j * n_points: end_batch, :]  # [batch, 2048, 11]
+
+        else:
+            # add duplicated points from last window
+            points_needed = end_batch - points.shape[1]
+            in_points = points[:, j * n_points:, :]
+
+            if points_needed!= n_points:
+                rdm_list = np.random.randint(0, n_points, points_needed)
+                extra_points = pc_w[:, rdm_list, :, -1]
+                in_points = torch.cat([in_points, extra_points], dim=1)
+                # if task == 'segmentation':
+                #     # add duplicated targets
+                #     extra_targets = targets[:, rdm_list]
+                #     targets = torch.cat((targets, extra_targets), dim=1)
+            else:
+                # padd with zeros
+                padd_points = torch.zeros(points.shape[0],points_needed,points.shape[2]).to(device)
+                in_points = torch.cat([in_points, padd_points], dim=1)
+
+        if plot:
+            # write figure to tensorboard
+            ax = plt.axes(projection='3d')
+            pc_plot = in_points.cpu()
+            sc = ax.scatter(pc_plot[0, :, 0], pc_plot[0, :, 1], pc_plot[0, :, 2], c=pc_plot[0, :, 3], s=10, marker='o',
+                            cmap='Spectral')
+            plt.colorbar(sc)
+            tag = filenames[0].split('/')[-1]
+            plt.title(
+                'PC size: ' + str(lengths[0].numpy()) + ' B size: ' + str(points.shape[1]) + ' L: ' + str(
+                    targets[0].cpu().numpy()))
+            writer_tensorboard.add_figure(tag, plt.gcf(), j)
+
+        in_points = torch.unsqueeze(in_points, dim=3)  # [batch, 2048, 11, 1]
+        # concat points into tensor w
+        pc_w = torch.cat([pc_w, in_points], dim=3)
+
+        count_p = count_p + in_points.shape[1]
+        j += 1
+
+    return pc_w
+
+
+def save_checkpoint(name, epoch, epochs_since_improvement, model, optimizer, accuracy, batch_size, learning_rate,
+                    number_of_points, weighing_method):
+    state = {
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'batch_size': batch_size,
+        'lr': learning_rate,
+        'number_of_points': number_of_points,
+        'epoch': epoch,
+        'epochs_since_improvement': epochs_since_improvement,
+        'accuracy': accuracy,
+        'weighing_method': weighing_method
+    }
+    filename = 'checkpoint_' + name + '.pth'
+
+    torch.save(state, 'pointNet/checkpoints/' + filename)
+
+
+def adjust_learning_rate(optimizer, shrink_factor=0.1):
+    """
+    Shrinks learning rate by a specified factor.
+
+    :param optimizer: optimizer whose learning rate must be shrunk.
+    :param shrink_factor: factor in interval (0, 1) to multiply learning rate with.
+    """
+
+    print("\nDECAYING learning rate.")
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = param_group['lr'] * shrink_factor
+    print("The new learning rate is %f\n" % (optimizer.param_groups[0]['lr'],))
+
 
