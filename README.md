@@ -26,7 +26,7 @@ python data_proc/1_get_windows.py --LAS_files_path path/LAS_files/here --sel_cla
 This function splits our dataset into windows of a fixed size with and without our target object. <br />
 First x,y,z of points labeled as our target object are obtained. <br />
 Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded. <br />
-Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one with without tower. <br />
+Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one without tower. <br />
 Point cloud cubes not containing the target object are stored as well.  <br />
 
 Then, use PDAL library to get HAG data by executing the following code for all .LAS files: <br />
@@ -43,6 +43,9 @@ This function first removes ground and points above 100 meters and then stores a
 
 ### Object Segmentation
 
+<b>Classification network</b>
+![plot](./doc/net.png)
+
 To train models use:<br />
 ```
 python pointNet/train_classification.py  /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 100 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4 --sampled True
@@ -51,7 +54,7 @@ python pointNet/train_classification.py  /dades/LIDAR/towers_detection/datasets 
 ```
 python pointNet/train_segmentation.py /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4
 ```
-To test models use:<br />
+For model inference use:<br />
 ```
 python pointNet/test_classification.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --weighing_method EFS --number_of_points 2048 --number_of_workers 0 --model_checkpoint $checkpoint_path
 ```
