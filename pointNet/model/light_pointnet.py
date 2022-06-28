@@ -9,9 +9,9 @@ class TransformationNet(nn.Module):
         super(TransformationNet, self).__init__()
         self.output_dim = output_dim
 
-        self.conv_1 = nn.Conv1d(input_dim, 64, 1)
-        self.conv_2 = nn.Conv1d(64, 128, 1)
-        self.conv_3 = nn.Conv1d(128, 256, 1)
+        self.conv_1 = nn.Conv1d(input_dim, 64, 1, bias=False)
+        self.conv_2 = nn.Conv1d(64, 128, 1, bias=False)
+        self.conv_3 = nn.Conv1d(128, 256, 1, bias=False)
 
         self.bn_1 = nn.BatchNorm1d(64)
         self.bn_2 = nn.BatchNorm1d(128)
@@ -19,8 +19,8 @@ class TransformationNet(nn.Module):
         self.bn_4 = nn.BatchNorm1d(256)
         self.bn_5 = nn.BatchNorm1d(128)
 
-        self.fc_1 = nn.Linear(256, 256)
-        self.fc_2 = nn.Linear(256, 128)
+        self.fc_1 = nn.Linear(256, 256, bias=False)
+        self.fc_2 = nn.Linear(256, 128, bias=False)
         self.fc_3 = nn.Linear(128, self.output_dim * self.output_dim)
 
     def forward(self, x):
