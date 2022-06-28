@@ -13,9 +13,6 @@ pip install pdal
 ## Preprocessing pipeline
 ![plot](./doc/processing.png)
 
-## Classification network
-![plot](./doc/net.png)
-
 
 ## Usage
 Execute the following commands from the main directory.
@@ -45,6 +42,9 @@ This function first removes ground and points above 100 meters and then stores a
 
 
 ### Object Segmentation
+
+### Classification network
+![plot](./doc/net.png)
 
 To train models use:<br />
 ```
