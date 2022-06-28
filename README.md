@@ -26,7 +26,7 @@ python data_proc/1_get_windows.py --LAS_files_path path/LAS_files/here --sel_cla
 This function splits our dataset into windows of a fixed size with and without our target object. <br />
 First x,y,z of points labeled as our target object are obtained. <br />
 Then, objects are segmented and the center of each object is stored, objects with less than ```min_p``` points are discarded. <br />
-Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one with without tower. <br />
+Finally, two versions of the same point cloud window are stored. A first one with a tower and a second one without tower. <br />
 Point cloud cubes not containing the target object are stored as well.  <br />
 
 Then, use PDAL library to get HAG data by executing the following code for all .LAS files: <br />
