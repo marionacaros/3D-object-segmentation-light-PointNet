@@ -43,7 +43,7 @@ This function first removes ground and points above 100 meters and then stores a
 
 ### Object Segmentation
 
-### Classification network
+<b>Classification network</b>
 ![plot](./doc/net.png)
 
 To train models use:<br />
@@ -54,7 +54,7 @@ python pointNet/train_classification.py  /dades/LIDAR/towers_detection/datasets 
 ```
 python pointNet/train_segmentation.py /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4
 ```
-To test models use:<br />
+For model inference use:<br />
 ```
 python pointNet/test_classification.py /dades/LIDAR/towers_detection/datasets pointNet/results/ --weighing_method EFS --number_of_points 2048 --number_of_workers 0 --model_checkpoint $checkpoint_path
 ```
