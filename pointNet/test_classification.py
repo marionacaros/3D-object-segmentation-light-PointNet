@@ -23,7 +23,6 @@ else:
 
 
 def test(dataset_folder,
-         task,
          n_points,
          output_folder,
          number_of_workers,
@@ -39,7 +38,7 @@ def test(dataset_folder,
 
     # Initialize dataset
     test_dataset = LidarDataset(dataset_folder=dataset_folder,
-                                task=task, number_of_points=n_points,
+                                task='classification', number_of_points=n_points,
                                 files=test_files,
                                 fixed_num_points=False)
 
@@ -122,7 +121,7 @@ def test(dataset_folder,
         # if 18 in set(clases) and pred.item() == 1:  # class 18 corresponds to other towers
         #     targets.append(1)
         # else:
-        # targets.append(target.item())
+        targets.append(target.item())
 
         if target.item() == 1 or pred.item() == 1:
             with open(os.path.join(output_folder, 'results-positives-%s.csv' % name), 'a') as fid:
@@ -183,12 +182,11 @@ def test(dataset_folder,
     print('TP: ', tp)
     print('FP: ', fp)
 
-    if task == 'classification':
-        print(f'Accuracy: {round(corrects.sum() / len(test_dataset) * 100, 2)} %')
-        # Recall - Del total de torres, quin percentatge s'han trobat?
-        print(f'Recall: {round(tp / all_positive * 100, 2)} %')
-        # Precision - De les que s'han detectat com a torres quin percentatge era realment torre?
-        print(f'Precision: {round(tp / detected_positive.sum() * 100, 2)} %')
+    print(f'Accuracy: {round(corrects.sum() / len(test_dataset) * 100, 2)} %')
+    # Recall - Del total de torres, quin percentatge s'han trobat?
+    print(f'Recall: {round(tp / all_positive * 100, 2)} %')
+    # Precision - De les que s'han detectat com a torres quin percentatge era realment torre?
+    print(f'Precision: {round(tp / detected_positive.sum() * 100, 2)} %')
 
     data = {"lr_recall": str(list(lr_recall)),
             "lr_precision": str(list(lr_precision))}
@@ -201,7 +199,6 @@ def test(dataset_folder,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
-    parser.add_argument('task', type=str, choices=['classification', 'segmentation'], help='type of task')
     parser.add_argument('output_folder', type=str, help='output folder')
     parser.add_argument('--number_of_points', type=int, default=2048, help='number of points per cloud')
     parser.add_argument('--number_of_workers', type=int, default=0, help='number of workers for the dataloader')
@@ -214,7 +211,6 @@ if __name__ == '__main__':
                         datefmt='%Y-%m-%d %H:%M:%S')
 
     test(args.dataset_folder,
-         args.task,
          args.number_of_points,
          args.output_folder,
          args.number_of_workers,
