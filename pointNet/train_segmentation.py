@@ -50,9 +50,9 @@ def train(
     location = 'pointNet/runs/tower_detec/' + str(n_points) + 'p/'
 
     # Datasets train / val / test
-    with open(os.path.join(path_list_files, 'train_files.txt'), 'r') as f:
+    with open(os.path.join(path_list_files, 'train_seg_files.txt'), 'r') as f:
         train_files = f.read().splitlines()
-    with open(os.path.join(path_list_files, 'val_files.txt'), 'r') as f:
+    with open(os.path.join(path_list_files, 'val_seg_files.txt'), 'r') as f:
         val_files = f.read().splitlines()
 
     writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'seg_train')
