@@ -48,11 +48,11 @@ This function first removes ground and points above 100 meters and then stores a
 
 To train models use:<br />
 ```
-python pointNet/train_classification.py  /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 100 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4 --sampled True
+python pointNet/train_classification.py  $data_path --path_list_files $list_files_split_path  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4 --c_sample True
 ```
 
 ```
-python pointNet/train_segmentation.py /dades/LIDAR/towers_detection/datasets  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4
+python pointNet/train_segmentation.py $data_path --path_list_files $list_files_split_path  --batch_size 32 --epochs 50 --learning_rate 0.001 --weighing_method EFS --number_of_points 2048 --number_of_workers 4 --c_sample True
 ```
 For model inference use:<br />
 ```
