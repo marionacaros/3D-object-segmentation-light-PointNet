@@ -42,10 +42,6 @@ def train(
     now = datetime.datetime.now()
     location = 'pointNet/runs/tower_detec/' + str(n_points) + 'p/'
 
-    if output_folder:
-        if not os.path.isdir(output_folder):
-            os.mkdir(output_folder)
-
     # Datasets train / val / test
     with open(os.path.join(path_list_files, 'train_files.txt'), 'r') as f:
         train_files = f.read().splitlines()
@@ -137,11 +133,6 @@ def train(
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-    # Tensorboard variables
-    train_loss = []
-    test_loss = []
-    train_acc = []
-    test_acc = []
     best_vloss = 1_000_000.
     epochs_since_improvement = 0
     c_weights = get_weights4class(weighing_method,
@@ -156,6 +147,13 @@ def train(
         not_regu_train_loss = []
         epoch_train_acc = []
         epoch_train_acc_w = []
+        epoch_val_loss = []
+        epoch_val_acc = []
+        epoch_val_acc_w = []
+        detected_positive = []
+        detected_negative = []
+        targets_pos = []
+        targets_neg = []
 
         if epochs_since_improvement == 10:
             adjust_learning_rate(optimizer, 0.5)
@@ -195,13 +193,8 @@ def train(
             # print(f'train loss: {np.mean(epoch_train_loss)}, train accuracy: {np.mean(epoch_train_acc)}')
 
         # --------------------------------------------- val loop ---------------------------------------------
-        epoch_val_loss = []
-        epoch_val_acc = []
-        epoch_val_acc_w = []
-        detected_positive = []
-        detected_negative = []
 
-        for batch_number, data in enumerate(val_dataloader):
+        for data in val_dataloader:
             points, targets, file_name = data
             points, targets = points.to(device), targets.to(device)
 
@@ -213,18 +206,16 @@ def train(
             preds = preds.data.max(1)[1]
             corrects = preds.eq(targets.data).cpu().sum()
 
-            targets_pos = (np.array(targets.cpu()) == np.ones(len(targets))).sum()
-            targets_neg = (np.array(targets.cpu()) == np.zeros(len(targets))).sum()
-            detected_positive.append(
-                (np.array(preds.cpu()) == np.ones(len(preds))).sum())  # boolean with positions of 1s
-            detected_negative.append(
-                (np.array(preds.cpu()) == np.zeros(len(preds))).sum())  # boolean with positions of 0s
+            # tensorboard
+            targets_pos.append((np.array(targets.cpu()) == np.ones(len(targets))).sum())
+            targets_neg.append((np.array(targets.cpu()) == np.zeros(len(targets))).sum())
+            detected_positive.append((np.array(preds.cpu()) == np.ones(len(preds))).sum())  # bool with pos of 1s
+            detected_negative.append((np.array(preds.cpu()) == np.zeros(len(preds))).sum())  # bool with pos of 0s
 
             accuracy = corrects.item() / float(batch_size)
             sample_weights = get_weights4sample(c_weights.cpu(), labels=targets).numpy()
             accuracy_w = balanced_accuracy_score(targets.cpu(), preds.cpu(), sample_weight=sample_weights)
             epoch_val_acc_w.append(accuracy_w)
-
             epoch_val_acc.append(accuracy)
         # ------------------------------------------------------------------------------------------------------
         # Tensorboard
@@ -257,17 +248,10 @@ def train(
         else:
             epochs_since_improvement += 1
 
-        # with open(os.path.join(output_folder, 'training_log.csv'), 'a') as fid:
-        #     fid.write('%s,%s,%s,%s,%s\n' % (epoch,
-        #                                     np.mean(epoch_train_loss),
-        #                                     np.mean(epoch_val_loss),
-        #                                     np.mean(epoch_train_acc_w),
-        #                                     np.mean(epoch_val_acc_w)))
-        train_loss.append(np.mean(epoch_train_loss))
-        test_loss.append(np.mean(epoch_val_loss))
-        train_acc.append(np.mean(epoch_train_acc_w))
-        test_acc.append(np.mean(epoch_val_acc_w))
 
+    # if output_folder:
+    #     if not os.path.isdir(output_folder):
+    #         os.mkdir(output_folder)
     # plot_losses(train_loss, test_loss, save_to_file=os.path.join(output_folder, 'loss_plot.png'))
     # plot_accuracies(train_acc, test_acc, save_to_file=os.path.join(output_folder, 'accuracy_plot.png'))
     print("--- TOTAL TIME: %s min ---" % (round((time.time() - start_time) / 60, 3)))
@@ -277,17 +261,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
     parser.add_argument('--path_list_files', type=str,
-                        default='pointNet/data/train_test_files/RGBN',
-                        help='output folder')
+                        default='pointNet/data/train_test_files/RGBN')
     parser.add_argument('--output_folder', type=str, help='output folder')
     parser.add_argument('--number_of_points', type=int, default=2048, help='number of points per cloud')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
-    parser.add_argument('--epochs', type=int, default=200, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=50, help='number of epochs')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate')
     parser.add_argument('--weighing_method', type=str, default='EFS',
                         help='sample weighing method: ISNS or INS or EFS')
     parser.add_argument('--beta', type=float, default=0.999, help='model checkpoint path')
-    parser.add_argument('--number_of_workers', type=int, default=1, help='number of workers for the dataloader')
+    parser.add_argument('--number_of_workers', type=int, default=4, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
     parser.add_argument('--c_sample', type=bool, default=False, help='use constrained sampling')
 
