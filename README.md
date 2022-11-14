@@ -58,10 +58,9 @@ python data_proc/2_preprocessing.py --in_path path/input_files --out_path path/o
 This function first removes ground and points above 100 meters and then stores a sampled version using the constrained sampling explained in the paper. <br />
 
 
-### Object Segmentation
+### Neural Network for classification and segmentation of objects
 
-<b>Classification network</b>
-![plot](./doc/net.png)
+![plot](./doc/nn.png)
 
 To train models use:<br />
 ```
