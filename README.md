@@ -6,7 +6,7 @@ This work is based on our [arXiv report](https://arxiv.org/abs/2210.16081), proc
 
 Airborne topographic LiDAR is an active remote sensing technology that emits near-infrared light to map objects on the Earth’s surface. Derived products of LiDAR are suitable to service a wide range of applications because of their rich three-dimensional spatial information and their capacity to obtain multiple returns. However, processing point cloud data still requires a large effort in manual edit- ing. Certain human-made objects are difficult to detect because of their variety of shapes, irregularly-distributed point clouds, and a low number of class samples. In this work, we propose an end-to-end deep learning framework to automatize the detection and segmentation of objects defined by an arbitrary number of LiDAR points surrounded by clutter. Our method is based on a light version of [PointNet](http://stanford.edu/~rqi/pointnet/) that achieves good performance on both object recognition and segmentation tasks. The results are tested against manually delineated power transmission towers and show promising accuracy.
  
-Pipeline for 3D segmentation on LiDAR data with Deep Learning
+**Pipeline for 3D segmentation on LiDAR data with Deep Learning:**
 
 ![plot](./doc/framework.png)
 
