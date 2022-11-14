@@ -259,7 +259,7 @@ if __name__ == '__main__':
             logging.info(f'Input path: {input_path}')
 
             # IMPORTANT !!!!!!!!!
-            # First execute pdal_hag.sh  # to get HeightAboveGround
+            # use pdal library to get HAG (HeightAboveGround)
 
             # ------ Remove ground, noise and outliers and normalize ------
             logging.info(f"1. Remove points of ground (up to {args.n_points}), noise and outliers, normalize"
