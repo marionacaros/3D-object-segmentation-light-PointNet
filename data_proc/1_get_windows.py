@@ -415,7 +415,6 @@ if __name__ == '__main__':
     SEL_CLASS = args.sel_class
     # 15 corresponds to power transmission tower
     # 18 corresponds to other towers
-    DATASET_NAME = args.dataset_name
     LAS_files_path = args.LAS_files_path
 
     for DATASET_NAME in args.datasets:
