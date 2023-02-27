@@ -46,12 +46,11 @@ class TransformationNet(nn.Module):
 
 class BasePointNet(nn.Module):
 
-    def __init__(self, point_dimension, return_local_features=False, dataset=''):
+        def __init__(self, point_dimension, return_local_features=False, device='cuda'):
         super(BasePointNet, self).__init__()
-        self.dataset = dataset
         self.return_local_features = return_local_features
-        self.input_transform = TransformationNet(input_dim=point_dimension, output_dim=point_dimension)
-        self.feature_transform = TransformationNet(input_dim=64, output_dim=64)
+        self.input_transform = TransformationNet(input_dim=point_dimension, output_dim=point_dimension, device=device)
+        self.feature_transform = TransformationNet(input_dim=64, output_dim=64, device=device)
 
         self.conv_1 = nn.Conv1d(7, 64, 1, bias=False)  # 7 channels to take I, NDVI, RGB into account
         self.conv_2 = nn.Conv1d(64, 64, 1, bias=False)
@@ -71,8 +70,7 @@ class BasePointNet(nn.Module):
         x_tnet = x[:, :, :2]  # only apply T-NET to x and y
         input_transform = self.input_transform(x_tnet)
         x_tnet = torch.bmm(x_tnet, input_transform)  # Performs a batch matrix-matrix product
-        x_tnet = torch.cat([x_tnet, x[:, :, 2].unsqueeze(2), x[:, :, 4].unsqueeze(2)], dim=2)  # concat z and intensity
-        x_tnet = torch.cat([x_tnet, x[:, :, 6].unsqueeze(2), x[:, :, 7].unsqueeze(2), x[:, :, 9].unsqueeze(2)],dim=2)  # concat Green Blue NDVI
+        x_tnet = torch.cat([x_tnet, x[:, :, 2:]], dim=2)  # concat al features to TNet out
         x_tnet = x_tnet.transpose(2, 1)  # [batch, dims, n_points]
 
         x = F.relu(self.bn_1(self.conv_1(x_tnet)))
@@ -89,7 +87,7 @@ class BasePointNet(nn.Module):
         x = F.relu(self.bn_4(self.conv_4(x)))
         x = F.relu(self.bn_5(self.conv_5(x)))
         x = nn.MaxPool1d(num_points)(x)
-        global_feature = x.view(-1, 256)  # [ batch, 1024, 1]
+        global_feature = x.view(-1, 256)
 
         if self.return_local_features:
             global_feature = global_feature.view(-1, 256, 1).repeat(1, 1, num_points)
