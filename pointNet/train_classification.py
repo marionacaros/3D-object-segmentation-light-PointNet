@@ -1,23 +1,31 @@
+from utils.utils import *
+from utils.get_metrics import *
+import os
 import argparse
 import torch.optim as optim
 import torch.nn.functional as F
 import time
-from progressbar import progressbar
-from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
-from datasets import LidarDataset
-from model.light_pointnet import ClassificationPointNet
-from model.light_pointnet_IGBVI import ClassificationPointNet_IGBVI
-# from model.pointnet import *
-
+from pointNet.datasets import LidarDataset
+from pointNet.model.light_pointnet_256 import ClassificationPointNet
 import logging
 import datetime
 from sklearn.metrics import balanced_accuracy_score
 import warnings
-from utils import *
 from prettytable import PrettyTable
 
+logging.basicConfig(format='%(message)s', #[%(asctime)s %(levelname)s]
+                    level=logging.INFO,
+                    datefmt='%d-%m %H:%M:%S')
+
 warnings.filterwarnings('ignore')
+
+if torch.cuda.is_available():
+    logging.info(f"cuda available")
+    device = 'cuda'
+else:
+    logging.info(f"cuda not available")
+    device = 'cpu'
 
 
 def train(
@@ -32,7 +40,7 @@ def train(
         beta,
         number_of_workers,
         model_checkpoint,
-        c_sample=False):
+        c_sample):
 
     start_time = time.time()
     logging.info(f"Weighing method: {weighing_method}")
@@ -40,22 +48,22 @@ def train(
 
     # Tensorboard location and plot names
     now = datetime.datetime.now()
-    location = 'pointNet/runs/tower_detec/' + str(n_points) + 'p/'
+    location = 'pointNet/runs/tower_detec/prod_files/'
 
     # Datasets train / val / test
-    with open(os.path.join(path_list_files, 'train_files.txt'), 'r') as f:
+    with open(os.path.join(path_list_files, 'train_cls_files.txt'), 'r') as f:
         train_files = f.read().splitlines()
-    with open(os.path.join(path_list_files, 'val_files.txt'), 'r') as f:
+    with open(os.path.join(path_list_files, 'val_cls_files.txt'), 'r') as f:
         val_files = f.read().splitlines()
 
     logging.info(f'Dataset folder: {dataset_folder}')
 
     if 'RGBN' in path_list_files:
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainRGBN_rdm')
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalRGBN_rdm')
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'cls_train')
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + 'cls_val')
     else:
-        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_ItrainI')
-        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_IvalI')
+        writer_train = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_trainI')
+        writer_val = SummaryWriter(location + now.strftime("%m-%d-%H:%M") + '_valI')
 
     logging.info(f"Tensorboard runs: {writer_train.get_logdir()}")
 
@@ -96,25 +104,17 @@ def train(
                                                  drop_last=True)
 
     if 'RGBN' in path_list_files:
-        model = ClassificationPointNet_IGBVI(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
-                                             point_dimension=train_dataset.POINT_DIMENSION,
-                                             dataset=train_dataset)
+        model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
+                                       point_dimension=train_dataset.POINT_DIMENSION,
+                                       dataset=train_dataset,
+                                       device=device)
     else:
         model = ClassificationPointNet(num_classes=train_dataset.NUM_CLASSIFICATION_CLASSES,
                                        point_dimension=train_dataset.POINT_DIMENSION,
                                        dataset=train_dataset)
-
-    if torch.cuda.is_available():
-        logging.info(f"cuda available")
-        model.cuda()
-        device = 'cuda'
-    else:
-        logging.info(f"cuda not available")
-        device = 'cpu'
+    model.to(device)
 
     # print model and parameters
-    # INPUT_SHAPE = (3, 2000)
-    # summary(model, INPUT_SHAPE)
     table = PrettyTable(["Modules", "Parameters"])
     total_params = 0
     for name, parameter in model.named_parameters():
@@ -140,6 +140,7 @@ def train(
                                   samples_per_cls=[train_dataset.len_landscape + val_dataset.len_landscape,
                                                    train_dataset.len_towers + val_dataset.len_towers],
                                   beta=beta).to(device)
+    logging.info(f'Weights: {c_weights}')
 
     for epoch in progressbar(range(epochs), redirect_stdout=True):
         epoch_train_loss = []
@@ -155,14 +156,17 @@ def train(
         targets_pos = []
         targets_neg = []
 
-        if epochs_since_improvement == 10:
+        if epochs_since_improvement == 10 or epoch == 15:
             adjust_learning_rate(optimizer, 0.5)
-        elif epoch == 10:
-            adjust_learning_rate(optimizer, 0.5)
+
         # --------------------------------------------- train loop ---------------------------------------------
         for data in train_dataloader:
-
             points, targets, file_name = data  # [batch, n_samples, dims] [batch, n_samples]
+
+            points = points.data.numpy()
+            points[:, :, :3] = rotate_point_cloud_z(points[:, :, :3])
+            points = torch.Tensor(points)
+
             points, targets = points.to(device), targets.to(device)
 
             optimizer.zero_grad()
@@ -248,7 +252,6 @@ def train(
         else:
             epochs_since_improvement += 1
 
-
     # if output_folder:
     #     if not os.path.isdir(output_folder):
     #         os.mkdir(output_folder)
@@ -259,26 +262,23 @@ def train(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('dataset_folder', type=str, help='path to the dataset folder')
+    parser.add_argument('--dataset_folder', type=str, help='path to the dataset folder',
+                        default='/dades/LIDAR/towers_detection/datasets/pc_towers_40x40_10p/normalized_2048')
     parser.add_argument('--path_list_files', type=str,
-                        default='pointNet/data/train_test_files/RGBN')
+                        default='train_test_files/RGBN_x10_40x40')
     parser.add_argument('--output_folder', type=str, help='output folder')
     parser.add_argument('--number_of_points', type=int, default=2048, help='number of points per cloud')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
-    parser.add_argument('--epochs', type=int, default=50, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=70, help='number of epochs')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate')
     parser.add_argument('--weighing_method', type=str, default='EFS',
                         help='sample weighing method: ISNS or INS or EFS')
     parser.add_argument('--beta', type=float, default=0.999, help='model checkpoint path')
-    parser.add_argument('--number_of_workers', type=int, default=4, help='number of workers for the dataloader')
+    parser.add_argument('--number_of_workers', type=int, default=8, help='number of workers for the dataloader')
     parser.add_argument('--model_checkpoint', type=str, default='', help='model checkpoint path')
-    parser.add_argument('--c_sample', type=bool, default=False, help='use constrained sampling')
+    parser.add_argument('--c_sample', type=bool, default=True, help='use constrained sampling')
 
     args = parser.parse_args()
-
-    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
-                        level=logging.DEBUG,
-                        datefmt='%Y-%m-%d %H:%M:%S')
 
     train(args.dataset_folder,
           args.path_list_files,
@@ -292,4 +292,3 @@ if __name__ == '__main__':
           args.number_of_workers,
           args.model_checkpoint,
           args.c_sample)
-
