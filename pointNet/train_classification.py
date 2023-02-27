@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import time
 from torch.utils.tensorboard import SummaryWriter
 from pointNet.datasets import LidarDataset
-from pointNet.model.light_pointnet_256 import ClassificationPointNet
+from pointNet.model.light_pointnet_IGBVI import ClassificationPointNet
 import logging
 import datetime
 from sklearn.metrics import balanced_accuracy_score
