@@ -53,9 +53,7 @@ class BasePointNet(nn.Module):
         self.input_transform = TransformationNet(input_dim=point_dimension, output_dim=point_dimension)
         self.feature_transform = TransformationNet(input_dim=64, output_dim=64)
 
-        # self.conv_1 = nn.Conv1d(point_dimension, 64, 1)
-        self.conv_1 = nn.Conv1d(7, 64, 1)  # todo changed from 3 ch to 8 channels to take I, NDVI, RGB into account
-        # self.conv_1 = nn.Conv1d(3, 64, 1)
+        self.conv_1 = nn.Conv1d(7, 64, 1)  # changed from 3 ch to 7 channels to take I, NDVI, RGB into account
         self.conv_2 = nn.Conv1d(64, 64, 1)
         self.conv_3 = nn.Conv1d(64, 64, 1)
         self.conv_4 = nn.Conv1d(64, 128, 1)
@@ -68,13 +66,11 @@ class BasePointNet(nn.Module):
         self.bn_5 = nn.BatchNorm1d(1024)
 
     def forward(self, x):
-        num_points = x.shape[1]  # torch.Size([BATCH, SAMPLES, DIMS])
-
+        num_points = x.shape[1]  # [BATCH, SAMPLES, DIMS]
         x_tnet = x[:, :, :2]  # only apply T-NET to x and y
-        input_transform = self.input_transform(x_tnet)
+        input_transform = self.input_transform(x_tnet) # get coord transformation
         x_tnet = torch.bmm(x_tnet, input_transform)  # Performs a batch matrix-matrix product
-        x_tnet = torch.cat([x_tnet, x[:, :, 2].unsqueeze(2), x[:, :, 4].unsqueeze(2)], dim=2)  # concat z and intensity
-        x_tnet = torch.cat([x_tnet, x[:, :, 6].unsqueeze(2), x[:, :, 7].unsqueeze(2), x[:, :, 9].unsqueeze(2)],dim=2)  # concat Green Blue NDVI
+        x_tnet = torch.cat([x_tnet, x], dim=2)  # concat all features, dims total = 7
         x_tnet = x_tnet.transpose(2, 1)  # [batch, dims, n_points]
 
         x = F.relu(self.bn_1(self.conv_1(x_tnet)))
