@@ -70,7 +70,7 @@ class BasePointNet(nn.Module):
         x_tnet = x[:, :, :2]  # only apply T-NET to x and y
         input_transform = self.input_transform(x_tnet) # get coord transformation
         x_tnet = torch.bmm(x_tnet, input_transform)  # Performs a batch matrix-matrix product
-        x_tnet = torch.cat([x_tnet, x], dim=2)  # concat all features, dims total = 7
+        x_tnet = torch.cat([x_tnet, x[:, :, 2:]], dim=2)  # concat all features to TNet out
         x_tnet = x_tnet.transpose(2, 1)  # [batch, dims, n_points]
 
         x = F.relu(self.bn_1(self.conv_1(x_tnet)))
